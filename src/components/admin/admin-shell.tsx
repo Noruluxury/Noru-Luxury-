@@ -5,12 +5,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import {
+  BarChart3,
   Landmark,
   Layers,
   LayoutDashboard,
   LogOut,
   Menu,
   MessageSquareQuote,
+  ScanBarcode,
   Settings,
   ShoppingCart,
   SprayCan,
@@ -29,7 +31,9 @@ const NAV = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/payments', label: 'Payments', icon: Wallet },
+  { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/perfumes', label: 'Perfumes', icon: SprayCan },
+  { href: '/admin/scan', label: 'Scan barcode', icon: ScanBarcode },
   { href: '/admin/brands', label: 'Brands', icon: Tags },
   { href: '/admin/categories', label: 'Categories', icon: Layers },
   { href: '/admin/reviews', label: 'Reviews', icon: MessageSquareQuote },

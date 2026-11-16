@@ -6,9 +6,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CircleCheck, Download, ExternalLink, ImagePlus, Printer, RefreshCw, Star, Trash2 } from 'lucide-react';
+import { CircleCheck, Download, ExternalLink, ImagePlus, Printer, RefreshCw, Star, Tag, Trash2 } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { MAX_IMAGE_SIZE_MB } from '@/lib/constants';
+import { barcodeImageUrl } from '@/lib/barcode';
 import { cn } from '@/lib/utils';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -17,7 +18,6 @@ import { AdminTitle, ConfirmDialog, ErrorBox, Panel } from './admin-ui';
 import { PerfumeForm } from './perfume-form';
 import type { Perfume } from '@/types';
 
-/** Opens a print-ready page with just the QR (sized for a bottle sticker) */
 function printQr(url: string, name: string) {
   const win = window.open('', '_blank', 'width=480,height=640');
   if (!win) {
@@ -108,6 +108,9 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
     if (files.length) imagesMutation.mutate({ type: 'add', files });
   };
 
+  const sortedVariants = [...perfume.variants].sort((a, b) => a.size - b.size);
+  const missingBarcodes = sortedVariants.some((v) => !v.barcode);
+
   return (
     <div className="space-y-6">
       <AdminTitle
@@ -126,7 +129,10 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
       {justCreated && (
         <div className="flex items-start gap-3 border-l-4 border-success bg-success/10 p-4 text-sm">
           <CircleCheck size={18} className="mt-0.5 shrink-0 text-success" />
-          <p><span className="font-semibold">Perfume created and QR code generated.</span> Download or print it below and stick it on the bottle.</p>
+          <p>
+            <span className="font-semibold">Perfume created — barcodes and QR code generated.</span> Print sticker labels from the
+            Barcodes panel and put them on the bottles.
+          </p>
         </div>
       )}
 
@@ -136,16 +142,58 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
         </Panel>
 
         <div className="order-1 space-y-6 lg:order-2">
-          {/* QR code */}
+          {/* Barcodes */}
+          <Panel
+            title={<span className="flex items-center gap-2"><Tag size={16} className="text-gold-dark" /> Barcodes (per size)</span>}
+            actions={
+              <a href={`/print/labels/${perfume._id}`} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold uppercase text-gold-dark hover:text-navy">
+                Print all
+              </a>
+            }
+          >
+            <ul className="divide-y divide-navy/10">
+              {sortedVariants.map((v) => (
+                <li key={v._id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="font-semibold">{v.size}ml</span>
+                    <span className="font-mono text-xs">{v.barcode ?? 'Not set'}</span>
+                  </div>
+                  {v.barcode ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`${barcodeImageUrl(perfume._id, v._id)}&v=${v.barcode}`}
+                        alt={`Barcode ${v.barcode}`}
+                        className="mt-2 h-20 w-full border border-navy/10 bg-white object-contain"
+                      />
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <a href={barcodeImageUrl(perfume._id, v._id, 'png', true)} className={buttonClasses({ variant: 'outline', size: 'sm' })}>
+                          <Download size={14} /> PNG
+                        </a>
+                        <a href={`/print/labels/${perfume._id}?variant=${v._id}`} target="_blank" rel="noopener noreferrer" className={buttonClasses({ variant: 'gold', size: 'sm' })}>
+                          <Printer size={14} /> Labels
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-xs text-navy/55">Click “Save changes” to generate.</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {missingBarcodes && <p className="mt-3 border-l-4 border-gold bg-gold/10 p-2 text-xs">Some sizes have no barcode yet — save the perfume to generate them.</p>}
+          </Panel>
+
+          {/* Customer QR */}
           <section className="border-t-4 border-gold bg-navy p-5 text-white">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gold">Bottle QR code</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-gold">Customer QR (authenticity)</h2>
+            <p className="mt-1 text-xs text-white/60">Customers scan this with their phone camera to open the official product page.</p>
             {perfume.qrCode?.url ? (
               <>
-                <div className="mx-auto mt-4 w-full max-w-[220px] bg-white p-3">
+                <div className="mx-auto mt-4 w-full max-w-[200px] bg-white p-3">
                   <Image src={perfume.qrCode.url} alt={`QR code for ${perfume.name}`} width={400} height={400} className="h-auto w-full" />
                 </div>
-                <p className="mt-3 text-xs text-white/65">Scans to:</p>
-                <div className="mt-1 flex items-center gap-2">
+                <div className="mt-3 flex items-center gap-2">
                   <p className="min-w-0 flex-1 truncate font-mono text-xs text-gold-light">{perfume.qrLink}</p>
                   <CopyButton value={perfume.qrLink ?? ''} label="Copy" className="h-8 bg-gold px-2 text-navy hover:bg-gold-light" />
                 </div>
@@ -175,9 +223,13 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
                   {i === 0 && <span className="absolute left-1 top-1 bg-gold px-1.5 py-0.5 text-[9px] font-bold uppercase text-navy">Cover</span>}
                   <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 bg-navy/80 p-1">
                     {i !== 0 && (
-                      <button type="button" disabled={imagesMutation.isPending} onClick={() => imagesMutation.mutate({ type: 'cover', publicId: img.publicId })} aria-label="Make cover" className="flex h-7 w-7 items-center justify-center text-gold hover:bg-gold hover:text-navy"><Star size={14} /></button>
+                      <button type="button" disabled={imagesMutation.isPending} onClick={() => imagesMutation.mutate({ type: 'cover', publicId: img.publicId })} aria-label="Make cover" className="flex h-7 w-7 items-center justify-center text-gold hover:bg-gold hover:text-navy">
+                        <Star size={14} />
+                      </button>
                     )}
-                    <button type="button" disabled={imagesMutation.isPending || perfume.images.length <= 1} onClick={() => setConfirm({ removeImage: img.publicId })} aria-label="Delete image" className="flex h-7 w-7 items-center justify-center text-white hover:bg-error disabled:opacity-30"><Trash2 size={14} /></button>
+                    <button type="button" disabled={imagesMutation.isPending || perfume.images.length <= 1} onClick={() => setConfirm({ removeImage: img.publicId })} aria-label="Delete image" className="flex h-7 w-7 items-center justify-center text-white hover:bg-error disabled:opacity-30">
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -194,7 +246,7 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
           {/* Danger zone */}
           <section className="border border-error/40 bg-error/5 p-5">
             <h2 className="text-sm font-bold uppercase tracking-wider text-error">Danger zone</h2>
-            <p className="mt-2 text-xs text-navy/65">Deleting removes the perfume, its images and QR code. Printed stickers will show “not available”. Consider hiding it instead.</p>
+            <p className="mt-2 text-xs text-navy/65">Deleting removes the perfume, its images and QR code. Consider hiding it instead.</p>
             <Button variant="danger" size="sm" className="mt-4" onClick={() => setConfirm('delete')}><Trash2 size={14} /> Delete perfume</Button>
           </section>
         </div>

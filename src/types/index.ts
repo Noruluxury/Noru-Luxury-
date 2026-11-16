@@ -76,6 +76,7 @@ export interface Variant {
   compareAtPrice?: number;
   stock: number;
   sku?: string;
+  barcode?: string;
 }
 
 export interface FragranceNotes {

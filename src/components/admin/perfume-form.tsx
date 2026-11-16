@@ -1,17 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useQuery } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { ImagePlus, Plus, Trash2, X } from 'lucide-react';
+import { Barcode, Camera, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { CONCENTRATION_LABELS, GENDER_LABELS, LONGEVITY_LABELS, SILLAGE_LABELS } from '@/lib/labels';
 import { MAX_IMAGE_SIZE_MB } from '@/lib/constants';
+import { isValidGtin } from '@/lib/barcode';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { fieldClass } from './admin-ui';
+import { Spinner } from '@/components/ui/spinner';
+import { Modal, fieldClass } from './admin-ui';
 import type { Brand, Category, Paginated, Perfume } from '@/types';
+
+// Camera scanner only loads when opened (keeps the form light)
+const CameraScanner = dynamic(() => import('./barcode-scanner').then((m) => m.CameraScanner), {
+  ssr: false,
+  loading: () => (
+    <div className="flex aspect-video items-center justify-center bg-navy text-gold">
+      <Spinner size="lg" />
+    </div>
+  ),
+});
 
 interface VariantField {
   _id?: string;
@@ -20,6 +33,7 @@ interface VariantField {
   compareAtPrice: string;
   stock: string;
   sku: string;
+  barcode: string;
 }
 
 interface FormValues {
@@ -43,8 +57,7 @@ interface FormValues {
 
 const MAX_IMAGES = 10;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
-
-const emptyVariant: VariantField = { size: '', price: '', compareAtPrice: '', stock: '', sku: '' };
+const emptyVariant: VariantField = { size: '', price: '', compareAtPrice: '', stock: '', sku: '', barcode: '' };
 
 const toFormValues = (p?: Perfume): FormValues => ({
   name: p?.name ?? '',
@@ -70,11 +83,13 @@ const toFormValues = (p?: Perfume): FormValues => ({
         compareAtPrice: v.compareAtPrice ? String(v.compareAtPrice) : '',
         stock: String(v.stock),
         sku: v.sku ?? '',
+        barcode: v.barcode ?? '',
       }))
     : [{ ...emptyVariant }],
 });
 
 const splitNotes = (text: string) => text.split(',').map((n) => n.trim()).filter(Boolean);
+const digitsOnly = (s: string) => s.replace(/\D/g, '');
 
 function toPayload(v: FormValues) {
   return {
@@ -96,6 +111,7 @@ function toPayload(v: FormValues) {
       ...(x.compareAtPrice && { compareAtPrice: Number(x.compareAtPrice) }),
       stock: Number(x.stock),
       ...(x.sku.trim() && { sku: x.sku.trim() }),
+      ...(digitsOnly(x.barcode) && { barcode: digitsOnly(x.barcode) }), // empty = auto-generate
     })),
     isFeatured: v.isFeatured,
     isActive: v.isActive,
@@ -112,16 +128,27 @@ function Field({ label, error, hint, children, className }: { label: string; err
   );
 }
 
-const options = (labels: Record<string, string>) => Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>);
+const options = (labels: Record<string, string>) =>
+  Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>);
 
 export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit'; initial?: Perfume; onSaved: (perfume: Perfume) => void }) {
   const [images, setImages] = useState<{ file: File; preview: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState<number | null>(null);
+  const [scanIndex, setScanIndex] = useState<number | null>(null);
 
-  const brandsQuery = useQuery({ queryKey: ['admin-brand-options'], queryFn: async () => (await api.get<Paginated<Brand>>('/brands/admin', { params: { limit: 100 } })).data.data });
-  const categoriesQuery = useQuery({ queryKey: ['admin-category-options'], queryFn: async () => (await api.get<Paginated<Category>>('/categories/admin', { params: { limit: 100 } })).data.data });
+  const brandsQuery = useQuery({
+    queryKey: ['admin-brand-options'],
+    queryFn: async () => (await api.get<Paginated<Brand>>('/brands/admin', { params: { limit: 100 } })).data.data,
+  });
+  const categoriesQuery = useQuery({
+    queryKey: ['admin-category-options'],
+    queryFn: async () => (await api.get<Paginated<Category>>('/categories/admin', { params: { limit: 100 } })).data.data,
+  });
 
-  const { register, control, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({ defaultValues: toFormValues(initial) });
+  const { register, control, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormValues>({
+    defaultValues: toFormValues(initial),
+  });
   const { fields, append, remove } = useFieldArray({ control, name: 'variants' });
 
   useEffect(() => {
@@ -139,6 +166,32 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
       valid.push({ file, preview: URL.createObjectURL(file) });
     }
     setImages((prev) => [...prev, ...valid].slice(0, MAX_IMAGES));
+  };
+
+  const generateBarcode = async (index: number) => {
+    setGenerating(index);
+    try {
+      const { data } = await api.post<{ barcode: string; mode: 'gs1' | 'in-store' }>('/perfumes/barcodes/next');
+      setValue(`variants.${index}.barcode`, data.barcode, { shouldDirty: true, shouldValidate: true });
+      toast.success(`${data.mode === 'gs1' ? 'GS1' : 'In-store'} barcode ${data.barcode} generated`);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Could not generate barcode'));
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  /** Box barcode read by the camera */
+  const onCameraScan = (raw: string) => {
+    const code = digitsOnly(raw);
+    if (scanIndex === null) return;
+    if (!isValidGtin(code)) {
+      toast.error(`“${raw}” isn’t a product barcode — try again`);
+      return;
+    }
+    setValue(`variants.${scanIndex}.barcode`, code, { shouldDirty: true, shouldValidate: true });
+    toast.success(`Box barcode ${code} added`);
+    setScanIndex(null);
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -159,7 +212,7 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
         });
         images.forEach(({ file }) => fd.append('images', file));
         saved = (await api.post<Perfume>('/perfumes', fd)).data;
-        toast.success('Perfume created — QR code generated');
+        toast.success('Perfume created — QR code and barcodes ready');
       } else {
         saved = (await api.patch<Perfume>(`/perfumes/${initial!._id}`, payload)).data;
         toast.success('Perfume updated');
@@ -174,6 +227,7 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
 
   const select = (hasError?: boolean) => cn(fieldClass, 'h-11', hasError && 'border-error');
   const input = (hasError?: boolean) => cn(fieldClass, 'h-11', hasError && 'border-error');
+  const iconBtn = 'flex h-11 w-11 shrink-0 items-center justify-center bg-navy text-gold hover:bg-gold hover:text-navy disabled:opacity-50';
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-8">
@@ -211,7 +265,9 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
 
       {/* Notes */}
       <div>
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-gold-dark">Fragrance notes <span className="font-normal normal-case text-navy/50">(comma separated)</span></h3>
+        <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-gold-dark">
+          Fragrance notes <span className="font-normal normal-case text-navy/50">(comma separated)</span>
+        </h3>
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Top notes"><input className={input()} placeholder="Bergamot, Pepper" {...register('topNotes')} /></Field>
           <Field label="Heart notes"><input className={input()} placeholder="Lavender, Geranium" {...register('middleNotes')} /></Field>
@@ -222,7 +278,7 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
       {/* Variants */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-gold-dark">Sizes, prices & stock</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-gold-dark">Sizes, prices, stock & barcodes</h3>
           <button type="button" onClick={() => append({ ...emptyVariant })} disabled={fields.length >= 10} className="inline-flex items-center gap-1 text-xs font-semibold uppercase text-navy hover:text-gold-dark disabled:opacity-40">
             <Plus size={14} /> Add size
           </button>
@@ -231,7 +287,7 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
           {fields.map((field, i) => {
             const e = errors.variants?.[i];
             return (
-              <div key={field.id} className="grid grid-cols-2 gap-3 border border-navy/10 bg-surface p-3 sm:grid-cols-6 sm:items-end">
+              <div key={field.id} className="grid grid-cols-2 gap-3 border border-navy/10 bg-surface p-3 sm:grid-cols-3 lg:grid-cols-5 lg:items-start">
                 <Field label="Size (ml)" error={e?.size?.message}>
                   <input type="number" inputMode="numeric" className={input(!!e?.size)} {...register(`variants.${i}.size`, { required: 'Required', validate: (v) => Number(v) >= 1 || 'Min 1' })} />
                 </Field>
@@ -247,20 +303,60 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
                 <Field label="SKU">
                   <input className={input()} placeholder="Auto" {...register(`variants.${i}.sku`)} />
                 </Field>
-                <button type="button" onClick={() => remove(i)} disabled={fields.length === 1} aria-label="Remove size" className="flex h-11 items-center justify-center gap-1 border border-error/40 text-xs font-semibold uppercase text-error hover:bg-error hover:text-white disabled:opacity-30">
-                  <Trash2 size={14} /> Remove
+
+                <Field
+                  label="Barcode"
+                  error={e?.barcode?.message}
+                  hint="Scan the box barcode — or leave empty to auto-generate"
+                  className="col-span-2 sm:col-span-3 lg:col-span-5"
+                >
+                  <div className="flex gap-1">
+                    <input
+                      inputMode="numeric"
+                      placeholder="Scan box barcode or leave empty"
+                      className={cn(input(!!e?.barcode), 'min-w-0 font-mono')}
+                      // USB scanners press Enter after the digits — don't submit the form
+                      onKeyDown={(ev) => {
+                        if (ev.key === 'Enter') ev.preventDefault();
+                      }}
+                      {...register(`variants.${i}.barcode`, {
+                        validate: (v) => !digitsOnly(v) || isValidGtin(digitsOnly(v)) || 'Not a valid barcode — check the digits',
+                      })}
+                    />
+                    <button type="button" onClick={() => setScanIndex(i)} aria-label="Scan box barcode with camera" title="Scan box barcode with camera" className={iconBtn}>
+                      <Camera size={18} />
+                    </button>
+                    <button type="button" onClick={() => generateBarcode(i)} disabled={generating !== null} aria-label="Generate new barcode" title="No barcode on the box? Generate one" className={iconBtn}>
+                      {generating === i ? <Spinner size="sm" /> : <Barcode size={18} />}
+                    </button>
+                  </div>
+                </Field>
+
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  disabled={fields.length === 1}
+                  aria-label="Remove size"
+                  className="col-span-2 flex h-10 items-center justify-center gap-1 border border-error/40 text-xs font-semibold uppercase text-error hover:bg-error hover:text-white disabled:opacity-30 sm:col-span-3 lg:col-span-5"
+                >
+                  <Trash2 size={14} /> Remove this size
                 </button>
               </div>
             );
           })}
         </div>
-        {mode === 'edit' && <p className="mt-2 text-xs text-navy/50">Existing sizes keep their ID so customers’ carts stay valid.</p>}
+        <p className="mt-2 text-xs text-navy/50">
+          If the box already has a barcode, scan it (USB scanner or <Camera size={11} className="inline" />) — that size will use the
+          manufacturer’s barcode. No barcode on the box? Leave it empty and one is created for you.
+        </p>
       </div>
 
       {/* Images (create only — edit page has its own manager) */}
       {mode === 'create' && (
         <div>
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-gold-dark">Images <span className="font-normal normal-case text-navy/50">(first = cover, max {MAX_IMAGES})</span></h3>
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-gold-dark">
+            Images <span className="font-normal normal-case text-navy/50">(first = cover, max {MAX_IMAGES})</span>
+          </h3>
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
             {images.map((img, i) => (
               <div key={img.preview} className={cn('relative aspect-square overflow-hidden border-2 bg-surface', i === 0 ? 'border-gold' : 'border-navy/10')}>
@@ -291,9 +387,14 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
 
       <div className="flex flex-col gap-2 border-t border-navy/10 pt-6 xs:flex-row">
         <Button type="submit" variant="gold" size="lg" loading={saving}>
-          {mode === 'create' ? 'Create perfume & QR code' : 'Save changes'}
+          {mode === 'create' ? 'Create perfume' : 'Save changes'}
         </Button>
       </div>
+
+      <Modal open={scanIndex !== null} onClose={() => setScanIndex(null)} title="Scan the box barcode">
+        <p className="mb-3 text-sm text-navy/65">Hold the barcode on the perfume box inside the frame, steady and well lit.</p>
+        {scanIndex !== null && <CameraScanner onDetected={onCameraScan} />}
+      </Modal>
     </form>
   );
 }
