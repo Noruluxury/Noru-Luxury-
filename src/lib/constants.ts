@@ -1,5 +1,5 @@
 /** Change this to your store's real name */
-export const SITE_NAME = 'Perfume Store';
+export const SITE_NAME = 'Norú Luxury';
 export const SITE_TAGLINE = 'Authentic fragrances, verified by QR';
 export const SITE_DESCRIPTION =
   'Shop authentic designer and niche perfumes in Nigeria. Every bottle carries a QR code that links to its official product page.';

@@ -156,7 +156,7 @@ function BankAccountModal({ account, onClose, onSaved }: { account: BankAccount 
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
         <Input label="Bank name" placeholder="e.g. GTBank, Opay, Moniepoint" error={errors.bankName?.message} {...register('bankName')} />
-        <Input label="Account name" placeholder="e.g. Perfume Store Ltd" error={errors.accountName?.message} {...register('accountName')} />
+        <Input label="Account name" placeholder="e.g.  Store Ltd" error={errors.accountName?.message} {...register('accountName')} />
         <Input label="Account number" inputMode="numeric" maxLength={10} placeholder="10 digits" error={errors.accountNumber?.message} {...register('accountNumber')} />
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider">Note (optional)</label>
