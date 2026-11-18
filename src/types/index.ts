@@ -57,6 +57,16 @@ export interface Category {
   createdAt: string;
 }
 
+export type ProductType = 'perfume' | 'perfume_oil' | 'diffuser' | 'gift_set' | 'lifestyle';
+export type CollectionGroup = 'fragrance' | 'diffuser' | 'more';
+
+export interface CollectionRef {
+  _id: string;
+  name: string;
+  slug: string;
+  group?: CollectionGroup;
+}
+
 export type Gender = 'men' | 'women' | 'unisex';
 export type Concentration =
   | 'parfum'
@@ -71,6 +81,7 @@ export type Sillage = 'intimate' | 'moderate' | 'strong' | 'enormous';
 
 export interface Variant {
   _id: string;
+  /** ml — 0 for one-price products */
   size: number;
   price: number;
   compareAtPrice?: number;
@@ -90,6 +101,8 @@ export interface PerfumeCard {
   _id: string;
   name: string;
   slug: string;
+  productType?: ProductType;
+  collection?: string | null;
   brand: { _id: string; name: string; slug: string; logo?: CloudImage };
   category?: { _id: string; name: string; slug: string };
   gender: Gender;
@@ -109,10 +122,11 @@ export interface PerfumeCard {
   createdAt: string;
 }
 
-/** Full perfume (detail page / admin) */
-export interface Perfume extends Omit<PerfumeCard, 'brand' | 'category'> {
+/** Full product (detail page / admin) */
+export interface Perfume extends Omit<PerfumeCard, 'brand' | 'category' | 'collection'> {
   brand: { _id: string; name: string; slug: string; logo?: CloudImage; description?: string };
   category: { _id: string; name: string; slug: string };
+  collection?: CollectionRef | null;
   description: string;
   notes: FragranceNotes;
   longevity?: Longevity;
@@ -179,6 +193,7 @@ export interface OrderItem {
   name: string;
   brandName?: string;
   image?: string;
+  /** ml — 0 for one-price products */
   size: number;
   price: number;
   quantity: number;

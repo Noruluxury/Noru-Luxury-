@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { CircleCheck, CircleX, ExternalLink, PackageCheck, Truck, TriangleAlert } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { PAYMENT_METHOD_LABELS } from '@/lib/labels';
+import { joinParts, sizeLabel } from '@/lib/product';
 import { cn, formatDate, formatNaira } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/spinner';
@@ -18,6 +19,14 @@ import type { AdminOrder } from '@/types/admin';
 import type { OrderStatus } from '@/types';
 
 type Dialog = null | 'confirm' | 'reject' | OrderStatus;
+
+interface DialogConfig {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  tone: 'primary' | 'gold' | 'danger';
+  reason?: { label: string; placeholder?: string; required?: boolean };
+}
 
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   pending: ['cancelled'],
@@ -69,16 +78,32 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const refundRequired = order.orderStatus === 'cancelled' && order.paymentStatus === 'paid';
   const proofs = [...(order.paymentProofs ?? [])].reverse();
 
-  const dialogConfig = (() => {
-    if (dialog === 'confirm') return { title: 'Confirm payment', message: `Confirm that ${formatNaira(order.total)} has been received for ${order.orderNumber}? The order moves to processing.`, confirmLabel: 'Yes, confirm', tone: 'gold' as const };
-    if (dialog === 'reject') return { title: 'Reject payment proof', message: 'The customer will see your reason and can upload a new proof or pay by card.', confirmLabel: 'Reject proof', tone: 'danger' as const, reason: { label: 'Reason', placeholder: 'e.g. Amount received was ₦50,000 not ₦95,000', required: true } };
+  const dialogConfig: DialogConfig | null = (() => {
+    if (dialog === 'confirm') {
+      return {
+        title: 'Confirm payment',
+        message: `Confirm that ${formatNaira(order.total)} has been received for ${order.orderNumber}? The order moves to processing.`,
+        confirmLabel: 'Yes, confirm',
+        tone: 'gold',
+      };
+    }
+    if (dialog === 'reject') {
+      return {
+        title: 'Reject payment proof',
+        message: 'The customer will see your reason and can upload a new proof or pay by card.',
+        confirmLabel: 'Reject proof',
+        tone: 'danger',
+        reason: { label: 'Reason', placeholder: 'e.g. Amount received was ₦50,000 not ₦95,000', required: true },
+      };
+    }
     if (dialog) {
       const a = STATUS_ACTION[dialog];
       return {
         title: a.label,
-        message: dialog === 'cancelled'
-          ? `Cancel ${order.orderNumber}? Stock will be restored${order.paymentStatus === 'paid' ? ' and the order will be marked for refund — refund the customer manually.' : '.'}`
-          : `Update ${order.orderNumber} to “${dialog}”?`,
+        message:
+          dialog === 'cancelled'
+            ? `Cancel ${order.orderNumber}? Stock will be restored${order.paymentStatus === 'paid' ? ' and the order will be marked for refund — refund the customer manually.' : '.'}`
+            : `Update ${order.orderNumber} to “${dialog}”?`,
         confirmLabel: a.label,
         tone: a.tone,
         reason: { label: dialog === 'cancelled' ? 'Reason' : 'Note', placeholder: dialog === 'shipped' ? 'e.g. Sent with GIG Logistics, tracking #123' : '' },
@@ -179,7 +204,9 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                     <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-wider text-gold-dark">{item.brandName}</p>
                       <p className="font-medium">{item.name}</p>
-                      <p className="text-xs text-navy/55">{item.size}ml · {formatNaira(item.price)} × {item.quantity}</p>
+                      <p className="text-xs text-navy/55">
+                        {joinParts(sizeLabel(item.size), `${formatNaira(item.price)} × ${item.quantity}`)}
+                      </p>
                     </div>
                     <p className="font-semibold">{formatNaira(item.subtotal)}</p>
                   </div>
@@ -247,7 +274,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
           message={dialogConfig.message}
           confirmLabel={dialogConfig.confirmLabel}
           tone={dialogConfig.tone}
-          reason={'reason' in dialogConfig ? dialogConfig.reason : undefined}
+          reason={dialogConfig.reason}
           loading={mutation.isPending}
           onClose={() => setDialog(null)}
           onConfirm={(reason) => dialog && mutation.mutate({ action: dialog, reason })}

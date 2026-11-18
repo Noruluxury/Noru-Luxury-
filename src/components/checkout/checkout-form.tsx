@@ -13,6 +13,7 @@ import { CreditCard, Landmark, Lock, ShieldCheck, ShoppingBag, Truck, TriangleAl
 import { api, getErrorMessage } from '@/lib/api';
 import { NIGERIAN_STATES } from '@/lib/constants';
 import { calcDeliveryFee } from '@/lib/delivery';
+import { sizeLabel } from '@/lib/product';
 import { cn, formatNaira } from '@/lib/utils';
 import { useCart, CART_QUERY_KEY } from '@/hooks/use-cart';
 import { usePublicSettings } from '@/hooks/use-public-settings';
@@ -145,8 +146,8 @@ export function CheckoutForm() {
 
   if (!lines.length && !placing) {
     return (
-      <StateMessage icon={ShoppingBag} title="Your bag is empty" description="Add a fragrance to your bag before checking out.">
-        <Link href="/perfumes" className={buttonClasses({ size: 'lg' })}>Shop perfumes</Link>
+      <StateMessage icon={ShoppingBag} title="Your bag is empty" description="Add something to your bag before checking out.">
+        <Link href="/collections" className={buttonClasses({ size: 'lg' })}>Explore our collections</Link>
       </StateMessage>
     );
   }
@@ -261,25 +262,28 @@ export function CheckoutForm() {
             <h2 className="text-xl font-medium text-gold">Your order</h2>
 
             <ul className="mt-5 max-h-72 space-y-4 overflow-y-auto pr-1">
-              {lines.map((line) => (
-                <li key={line.key} className="flex gap-3">
-                  <div className="relative h-16 w-14 shrink-0 overflow-hidden border border-gold/30 bg-white">
-                    {line.image ? (
-                      <Image src={line.image} alt={line.name} fill sizes="56px" className="object-cover" />
-                    ) : (
-                      <span className="flex h-full items-center justify-center font-serif italic text-gold-dark">{line.name.charAt(0)}</span>
-                    )}
-                    <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center bg-gold px-1 text-[10px] font-bold text-navy">{line.quantity}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-sm font-medium">{line.name}</p>
-                    <p className="text-xs text-white/60">{line.size}ml</p>
-                  </div>
-                  <p className={cn('text-sm font-semibold', !line.inStock && 'text-error')}>
-                    {line.inStock ? formatNaira(line.subtotal) : 'Sold out'}
-                  </p>
-                </li>
-              ))}
+              {lines.map((line) => {
+                const size = sizeLabel(line.size);
+                return (
+                  <li key={line.key} className="flex gap-3">
+                    <div className="relative h-16 w-14 shrink-0 overflow-hidden border border-gold/30 bg-white">
+                      {line.image ? (
+                        <Image src={line.image} alt={line.name} fill sizes="56px" className="object-cover" />
+                      ) : (
+                        <span className="flex h-full items-center justify-center font-serif italic text-gold-dark">{line.name.charAt(0)}</span>
+                      )}
+                      <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center bg-gold px-1 text-[10px] font-bold text-navy">{line.quantity}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-medium">{line.name}</p>
+                      {size && <p className="text-xs text-white/60">{size}</p>}
+                    </div>
+                    <p className={cn('text-sm font-semibold', !line.inStock && 'text-error')}>
+                      {line.inStock ? formatNaira(line.subtotal) : 'Sold out'}
+                    </p>
+                  </li>
+                );
+              })}
             </ul>
 
             <dl className="mt-5 space-y-3 border-t border-gold/30 pt-5 text-sm">

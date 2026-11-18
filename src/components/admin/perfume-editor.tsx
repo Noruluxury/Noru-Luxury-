@@ -10,6 +10,7 @@ import { CircleCheck, Download, ExternalLink, ImagePlus, Printer, RefreshCw, Sta
 import { api, getErrorMessage } from '@/lib/api';
 import { MAX_IMAGE_SIZE_MB } from '@/lib/constants';
 import { barcodeImageUrl } from '@/lib/barcode';
+import { PRODUCT_TYPE_LABELS, sizeLabel } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -92,14 +93,14 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
     mutationFn: async () => api.delete(`/perfumes/${perfumeId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-perfumes'] });
-      toast.success('Perfume deleted');
+      toast.success('Product deleted');
       router.replace('/admin/perfumes');
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   });
 
-  if (isLoading) return <PageLoader label="Loading perfume..." />;
-  if (isError || !perfume) return <ErrorBox message={getErrorMessage(error, 'Perfume not found')} />;
+  if (isLoading) return <PageLoader label="Loading product..." />;
+  if (isError || !perfume) return <ErrorBox message={getErrorMessage(error, 'Product not found')} />;
 
   const uploadFiles = (list: FileList | null) => {
     if (!list?.length) return;
@@ -115,10 +116,15 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
     <div className="space-y-6">
       <AdminTitle
         title={perfume.name}
-        description={<span>{perfume.brand?.name} · <span className="font-mono text-xs">/{perfume.slug}</span></span>}
+        description={
+          <span>
+            {perfume.brand?.name} · {PRODUCT_TYPE_LABELS[perfume.productType ?? 'perfume']}
+            {perfume.collection?.name ? ` · ${perfume.collection.name}` : ''} · <span className="font-mono text-xs">/{perfume.slug}</span>
+          </span>
+        }
         actions={
           <>
-            <Link href="/admin/perfumes" className={buttonClasses({ variant: 'outline', size: 'sm' })}>All perfumes</Link>
+            <Link href="/admin/perfumes" className={buttonClasses({ variant: 'outline', size: 'sm' })}>All products</Link>
             <a href={`/perfumes/${perfume.slug}`} target="_blank" rel="noopener noreferrer" className={buttonClasses({ size: 'sm' })}>
               <ExternalLink size={14} /> View on site
             </a>
@@ -130,8 +136,7 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
         <div className="flex items-start gap-3 border-l-4 border-success bg-success/10 p-4 text-sm">
           <CircleCheck size={18} className="mt-0.5 shrink-0 text-success" />
           <p>
-            <span className="font-semibold">Perfume created — barcodes and QR code generated.</span> Print sticker labels from the
-            Barcodes panel and put them on the bottles.
+            <span className="font-semibold">Product created — barcode and QR code ready.</span> Print sticker labels from the Barcodes panel.
           </p>
         </div>
       )}
@@ -144,7 +149,7 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
         <div className="order-1 space-y-6 lg:order-2">
           {/* Barcodes */}
           <Panel
-            title={<span className="flex items-center gap-2"><Tag size={16} className="text-gold-dark" /> Barcodes (per size)</span>}
+            title={<span className="flex items-center gap-2"><Tag size={16} className="text-gold-dark" /> Barcodes</span>}
             actions={
               <a href={`/print/labels/${perfume._id}`} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold uppercase text-gold-dark hover:text-navy">
                 Print all
@@ -155,7 +160,7 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
               {sortedVariants.map((v) => (
                 <li key={v._id} className="py-3 first:pt-0 last:pb-0">
                   <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="font-semibold">{v.size}ml</span>
+                    <span className="font-semibold">{sizeLabel(v.size) || 'Single price'}</span>
                     <span className="font-mono text-xs">{v.barcode ?? 'Not set'}</span>
                   </div>
                   {v.barcode ? (
@@ -181,7 +186,7 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
                 </li>
               ))}
             </ul>
-            {missingBarcodes && <p className="mt-3 border-l-4 border-gold bg-gold/10 p-2 text-xs">Some sizes have no barcode yet — save the perfume to generate them.</p>}
+            {missingBarcodes && <p className="mt-3 border-l-4 border-gold bg-gold/10 p-2 text-xs">Some prices have no barcode yet — save the product to generate them.</p>}
           </Panel>
 
           {/* Customer QR */}
@@ -246,15 +251,15 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
           {/* Danger zone */}
           <section className="border border-error/40 bg-error/5 p-5">
             <h2 className="text-sm font-bold uppercase tracking-wider text-error">Danger zone</h2>
-            <p className="mt-2 text-xs text-navy/65">Deleting removes the perfume, its images and QR code. Consider hiding it instead.</p>
-            <Button variant="danger" size="sm" className="mt-4" onClick={() => setConfirm('delete')}><Trash2 size={14} /> Delete perfume</Button>
+            <p className="mt-2 text-xs text-navy/65">Deleting removes the product, its images and QR code. Consider hiding it instead.</p>
+            <Button variant="danger" size="sm" className="mt-4" onClick={() => setConfirm('delete')}><Trash2 size={14} /> Delete product</Button>
           </section>
         </div>
       </div>
 
       <ConfirmDialog
         open={confirm === 'delete'}
-        title="Delete perfume?"
+        title="Delete product?"
         message={`“${perfume.name}” will be permanently deleted. This cannot be undone.`}
         confirmLabel="Delete"
         tone="danger"
@@ -275,7 +280,7 @@ export function PerfumeEditor({ perfumeId, justCreated = false }: { perfumeId: s
       <ConfirmDialog
         open={!!confirm && typeof confirm === 'object'}
         title="Delete image?"
-        message="This image will be removed from the perfume."
+        message="This image will be removed from the product."
         confirmLabel="Delete image"
         tone="danger"
         loading={imagesMutation.isPending}

@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Download, ExternalLink, Pencil, Plus } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { formatNaira } from '@/lib/utils';
+import { PRODUCT_TYPE_LABELS, isSizedType } from '@/lib/product';
 import { buttonClasses } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/spinner';
 import { ActiveBadge, AdminPagination, AdminTitle, EmptyRow, ErrorBox, FilterSelect, SearchBox, TableHead, TableWrap, td } from './admin-ui';
@@ -31,17 +32,17 @@ export function PerfumesTable({ initialLowStock = false }: { initialLowStock?: b
   return (
     <div>
       <AdminTitle
-        title="Perfumes"
-        description="Each perfume gets a QR code automatically when created."
+        title="Products"
+        description="Perfumes, oils, diffusers, gift sets and lifestyle products. Each gets a QR code and barcode automatically."
         actions={
           <Link href="/admin/perfumes/new" className={buttonClasses({ variant: 'gold' })}>
-            <Plus size={16} /> Add perfume
+            <Plus size={16} /> Add product
           </Link>
         }
       />
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Name, slug or SKU..." />
+        <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Name, slug, SKU or barcode..." />
         <FilterSelect label="Visibility" value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={[{ value: '', label: 'All' }, { value: 'true', label: 'Active' }, { value: 'false', label: 'Hidden' }]} />
         <label className="flex h-10 cursor-pointer items-center gap-2 border border-navy/20 bg-white px-3 text-sm">
           <input type="checkbox" checked={lowStock} onChange={(e) => { setLowStock(e.target.checked); setPage(1); }} className="h-4 w-4 accent-navy" />
@@ -56,14 +57,15 @@ export function PerfumesTable({ initialLowStock = false }: { initialLowStock?: b
       ) : (
         <>
           <TableWrap>
-            <TableHead columns={['Perfume', 'Category', 'Price', 'Stock', 'Status', 'QR', '']} />
+            <TableHead columns={['Product', 'Collection', 'Price', 'Stock', 'Status', 'QR', '']} />
             <tbody className="divide-y divide-navy/10">
-              {data?.data.length === 0 && <EmptyRow colSpan={7} message="No perfumes found" />}
+              {data?.data.length === 0 && <EmptyRow colSpan={7} message="No products found" />}
               {data?.data.map((p) => {
                 const prices = p.variants.map((v) => v.price);
                 const min = Math.min(...prices);
                 const max = Math.max(...prices);
                 const stock = p.variants.reduce((s, v) => s + v.stock, 0);
+                const sized = isSizedType(p.productType);
                 return (
                   <tr key={p._id} className="hover:bg-surface">
                     <td className={td}>
@@ -77,11 +79,14 @@ export function PerfumesTable({ initialLowStock = false }: { initialLowStock?: b
                         </div>
                       </div>
                     </td>
-                    <td className={td}>{p.category?.name ?? '—'}</td>
+                    <td className={td}>
+                      <p className="max-w-[180px] truncate">{p.collection?.name ?? <span className="text-error">Not set</span>}</p>
+                      <p className="text-xs text-navy/50">{PRODUCT_TYPE_LABELS[p.productType ?? 'perfume']}</p>
+                    </td>
                     <td className={`${td} whitespace-nowrap`}>{min === max ? formatNaira(min) : `${formatNaira(min)} – ${formatNaira(max)}`}</td>
                     <td className={td}>
                       <span className={stock === 0 ? 'font-bold text-error' : stock <= 5 ? 'font-bold text-gold-dark' : 'font-semibold'}>{stock}</span>
-                      <span className="text-xs text-navy/50"> · {p.variants.length} size{p.variants.length > 1 ? 's' : ''}</span>
+                      {sized && <span className="text-xs text-navy/50"> · {p.variants.length} size{p.variants.length > 1 ? 's' : ''}</span>}
                     </td>
                     <td className={td}>
                       <div className="flex flex-wrap gap-1">

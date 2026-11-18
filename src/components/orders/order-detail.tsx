@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { PAYMENT_METHOD_LABELS } from '@/lib/labels';
+import { joinParts, sizeLabel } from '@/lib/product';
 import { cn, formatDate, formatNaira } from '@/lib/utils';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
@@ -87,7 +88,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             {/* Items */}
             <section>
               <h2 className="text-xl font-medium sm:text-2xl">Items</h2>
-              {delivered && <p className="mt-1 text-sm text-navy/60">Enjoying your fragrance? Leave a review to help other shoppers.</p>}
+              {delivered && <p className="mt-1 text-sm text-navy/60">Enjoying your purchase? Leave a review to help other shoppers.</p>}
               <ul className="mt-4 divide-y divide-navy/10 border-y border-navy/10">
                 {order.items.map((item, i) => (
                   <li key={`${item.variantId}-${i}`} className="flex gap-4 py-4">
@@ -105,7 +106,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                         )}
                         <p className="font-serif text-base sm:text-lg">{item.name}</p>
                         <p className="text-xs text-navy/55 sm:text-sm">
-                          {item.size}ml · {formatNaira(item.price)} × {item.quantity}
+                          {joinParts(sizeLabel(item.size), `${formatNaira(item.price)} × ${item.quantity}`)}
                         </p>
                         {delivered && (
                           <button
@@ -113,7 +114,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                             onClick={() => setRating({ perfumeId: item.perfume, name: item.name })}
                             className="mt-2 inline-flex items-center gap-1.5 bg-gold px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-navy hover:bg-navy hover:text-gold"
                           >
-                            <Star size={12} fill="currentColor" /> Rate this perfume
+                            <Star size={12} fill="currentColor" /> Write a review
                           </button>
                         )}
                       </div>
@@ -347,7 +348,7 @@ function getBanner(order: Order):
       icon: PackageCheck,
       tone: 'success',
       title: 'Delivered',
-      text: order.deliveredAt ? `Delivered ${formatDate(order.deliveredAt, true)}. Enjoy your fragrance!` : 'Enjoy your fragrance!',
+      text: order.deliveredAt ? `Delivered ${formatDate(order.deliveredAt, true)}. Enjoy your purchase!` : 'Enjoy your purchase!',
     };
   }
   return null;

@@ -8,6 +8,7 @@ import { deliveryHeadline } from '@/lib/delivery';
 import { absoluteUrl } from '@/lib/site';
 import { SITE_NAME } from '@/lib/constants';
 import { CONCENTRATION_LABELS, GENDER_LABELS, LONGEVITY_LABELS, SILLAGE_LABELS } from '@/lib/labels';
+import { PRODUCT_TYPE_LABELS, isSizedType, joinParts } from '@/lib/product';
 import { ImageGallery } from '@/components/perfume/image-gallery';
 import { PurchasePanel } from '@/components/perfume/purchase-panel';
 import { NotesPyramid } from '@/components/perfume/notes-pyramid';
@@ -31,7 +32,7 @@ async function getPerfume(slug: string): Promise<Perfume | null> {
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
   const perfume = await getPerfume(slug);
-  if (!perfume) return { title: 'Perfume not found', robots: { index: false } };
+  if (!perfume) return { title: 'Product not found', robots: { index: false } };
 
   const title = `${perfume.name} by ${perfume.brand.name}`;
   const description = perfume.shortDescription ?? perfume.description.slice(0, 155);
@@ -58,24 +59,43 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
     getPublicSettings(),
   ]);
 
+  const type = perfume.productType ?? 'perfume';
+  const sized = isSizedType(type);
+  const collection = perfume.collection ?? null;
   const delivery = deliveryHeadline(settings.delivery);
   const url = absoluteUrl(`/perfumes/${perfume.slug}`);
   const prices = perfume.variants.map((v) => v.price);
   const inStock = perfume.variants.some((v) => v.stock > 0);
 
+  // Middle breadcrumb: the collection if set, otherwise the brand
+  const crumb = collection
+    ? { name: collection.name, href: `/collections/${collection.slug}` }
+    : { name: perfume.brand.name, href: `/perfumes?brand=${perfume.brand.slug}` };
+
   const details: { label: string; value?: string; href?: string }[] = [
     { label: 'Brand', value: perfume.brand.name, href: `/perfumes?brand=${perfume.brand.slug}` },
-    { label: 'Family', value: perfume.category?.name, href: perfume.category ? `/perfumes?category=${perfume.category.slug}` : undefined },
-    { label: 'Concentration', value: CONCENTRATION_LABELS[perfume.concentration] },
-    { label: 'For', value: GENDER_LABELS[perfume.gender] },
-    { label: 'Fragrance type', value: perfume.fragranceFamily },
-    { label: 'Longevity', value: perfume.longevity ? LONGEVITY_LABELS[perfume.longevity] : undefined },
-    { label: 'Sillage', value: perfume.sillage ? SILLAGE_LABELS[perfume.sillage] : undefined },
+    { label: 'Collection', value: collection?.name, href: collection ? `/collections/${collection.slug}` : undefined },
+    ...(sized
+      ? [
+          { label: 'Family', value: perfume.category?.name, href: perfume.category ? `/perfumes?category=${perfume.category.slug}` : undefined },
+          { label: 'Concentration', value: CONCENTRATION_LABELS[perfume.concentration] },
+          { label: 'For', value: GENDER_LABELS[perfume.gender] },
+          { label: 'Fragrance type', value: perfume.fragranceFamily },
+          { label: 'Longevity', value: perfume.longevity ? LONGEVITY_LABELS[perfume.longevity] : undefined },
+          { label: 'Sillage', value: perfume.sillage ? SILLAGE_LABELS[perfume.sillage] : undefined },
+        ]
+      : [
+          { label: 'Type', value: PRODUCT_TYPE_LABELS[type] },
+          { label: 'Scent family', value: perfume.category?.name, href: perfume.category ? `/perfumes?category=${perfume.category.slug}` : undefined },
+        ]),
   ];
+
+  const subtitle = sized
+    ? joinParts(CONCENTRATION_LABELS[perfume.concentration], GENDER_LABELS[perfume.gender])
+    : joinParts(PRODUCT_TYPE_LABELS[type], collection?.name);
 
   return (
     <div className="container-page pb-16 pt-5 sm:pb-24 sm:pt-8">
-      {/* Structured data: product (price, stock, rating) + breadcrumbs */}
       <JsonLd
         data={[
           {
@@ -85,7 +105,8 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
             description: perfume.shortDescription ?? perfume.description.slice(0, 500),
             image: perfume.images.map((i) => i.url),
             sku: perfume.variants[0]?.sku,
-            category: perfume.category?.name,
+            ...(perfume.variants[0]?.barcode ? { gtin: perfume.variants[0].barcode } : {}),
+            category: collection?.name ?? perfume.category?.name,
             brand: { '@type': 'Brand', name: perfume.brand.name },
             url,
             offers: {
@@ -115,8 +136,8 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
             '@type': 'BreadcrumbList',
             itemListElement: [
               { '@type': 'ListItem', position: 1, name: 'Home', item: absoluteUrl('/') },
-              { '@type': 'ListItem', position: 2, name: 'Shop', item: absoluteUrl('/perfumes') },
-              { '@type': 'ListItem', position: 3, name: perfume.brand.name, item: absoluteUrl(`/perfumes?brand=${perfume.brand.slug}`) },
+              { '@type': 'ListItem', position: 2, name: collection ? 'Collections' : 'Shop', item: absoluteUrl(collection ? '/collections' : '/perfumes') },
+              { '@type': 'ListItem', position: 3, name: crumb.name, item: absoluteUrl(crumb.href) },
               { '@type': 'ListItem', position: 4, name: perfume.name, item: url },
             ],
           },
@@ -127,9 +148,11 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
         <ol className="flex flex-wrap items-center gap-1 text-xs text-navy/50">
           <li><Link href="/" className="hover:text-gold-dark">Home</Link></li>
           <ChevronRight size={12} className="text-gold" />
-          <li><Link href="/perfumes" className="hover:text-gold-dark">Shop</Link></li>
+          <li>
+            <Link href={collection ? '/collections' : '/perfumes'} className="hover:text-gold-dark">{collection ? 'Collections' : 'Shop'}</Link>
+          </li>
           <ChevronRight size={12} className="text-gold" />
-          <li><Link href={`/perfumes?brand=${perfume.brand.slug}`} className="hover:text-gold-dark">{perfume.brand.name}</Link></li>
+          <li><Link href={crumb.href} className="hover:text-gold-dark">{crumb.name}</Link></li>
           <ChevronRight size={12} className="text-gold" />
           <li className="max-w-[45vw] truncate font-medium text-navy">{perfume.name}</li>
         </ol>
@@ -143,9 +166,7 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
             {perfume.brand.name}
           </Link>
           <h1 className="mt-2 text-3xl font-medium leading-tight sm:text-4xl xl:text-5xl">{perfume.name}</h1>
-          <p className="mt-2 text-sm text-navy/60">
-            {CONCENTRATION_LABELS[perfume.concentration]} · {GENDER_LABELS[perfume.gender]}
-          </p>
+          {subtitle && <p className="mt-2 text-sm text-navy/60">{subtitle}</p>}
 
           {!!perfume.ratingCount && (
             <a href="#reviews" className="mt-3 inline-flex items-center gap-2 text-sm hover:text-gold-dark">
@@ -180,7 +201,8 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
               <div>
                 <p className="text-sm font-semibold text-gold">Official product page</p>
                 <p className="mt-1 text-xs leading-relaxed text-white/75">
-                  If you scanned the QR code on your bottle and landed here, your perfume is a genuine product from our store.
+                  Shop with confidence. If you scanned the QR code on your {sized ? 'bottle' : 'product'} and landed here, it is a genuine
+                  product from our store.
                 </p>
               </div>
             </div>
@@ -198,7 +220,7 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
       <section className="mt-14 grid gap-10 border-t border-navy/10 pt-10 sm:mt-20 lg:grid-cols-[1.4fr_1fr] lg:gap-16">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold-dark">The story</p>
-          <h2 className="mt-2 text-2xl font-medium sm:text-3xl">About this fragrance</h2>
+          <h2 className="mt-2 text-2xl font-medium sm:text-3xl">{sized ? 'About this fragrance' : 'About this product'}</h2>
           <div className="mt-3 h-0.5 w-14 bg-gold" />
           <div className="mt-5 whitespace-pre-line text-sm leading-relaxed text-navy/75 sm:text-base">{perfume.description}</div>
         </div>
@@ -225,7 +247,7 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
         </div>
       </section>
 
-      <NotesPyramid notes={perfume.notes} />
+      {sized && <NotesPyramid notes={perfume.notes} />}
 
       <ProductReviews perfumeId={perfume._id} slug={perfume.slug} />
 
@@ -236,7 +258,10 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold-dark">Discover more</p>
               <h2 className="mt-2 text-2xl font-medium sm:text-3xl">You may also like</h2>
             </div>
-            <Link href="/perfumes" className="shrink-0 text-xs font-semibold uppercase tracking-wider underline decoration-gold decoration-2 underline-offset-4 hover:text-gold-dark">
+            <Link
+              href={collection ? `/collections/${collection.slug}` : '/perfumes'}
+              className="shrink-0 text-xs font-semibold uppercase tracking-wider underline decoration-gold decoration-2 underline-offset-4 hover:text-gold-dark"
+            >
               View all
             </Link>
           </div>

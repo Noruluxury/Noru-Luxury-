@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
+  ArrowRight,
+  ChevronDown,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -15,9 +17,11 @@ import {
   X,
 } from 'lucide-react';
 import { NAV_LINKS, SITE_NAME } from '@/lib/constants';
+import { groupCollections } from '@/lib/product';
 import { useAuthStore } from '@/store/auth.store';
 import { useCart } from '@/hooks/use-cart';
 import { cn } from '@/lib/utils';
+import type { ProductCollection } from '@/types/collection';
 
 function CartButton() {
   const { count } = useCart();
@@ -47,18 +51,32 @@ function Logo({ className }: { className?: string }) {
   );
 }
 
-export function Navbar({ announcement }: { announcement?: string | null }) {
+export function Navbar({
+  announcement,
+  collections = [],
+}: {
+  announcement?: string | null;
+  collections?: ProductCollection[];
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, status, logout } = useAuthStore();
+  const groups = useMemo(() => groupCollections(collections), [collections]);
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [mobileBrowseOpen, setMobileBrowseOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const browseRef = useRef<HTMLLIElement>(null);
+
+  const onCollections = pathname === '/collections' || pathname.startsWith('/collections/');
 
   useEffect(() => {
     setMobileOpen(false);
     setUserMenuOpen(false);
+    setBrowseOpen(false);
+    setMobileBrowseOpen(pathname.startsWith('/collections'));
   }, [pathname]);
 
   useEffect(() => {
@@ -70,12 +88,22 @@ export function Navbar({ announcement }: { announcement?: string | null }) {
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) setUserMenuOpen(false);
+      if (browseRef.current && !browseRef.current.contains(target)) setBrowseOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setBrowseOpen(false);
         setUserMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -88,6 +116,12 @@ export function Navbar({ announcement }: { announcement?: string | null }) {
   const isActive = (href: string) => pathname === href.split('?')[0];
   const isAdmin = user?.role === 'admin';
 
+  const desktopLink = (active: boolean) =>
+    cn(
+      'border-b-2 py-1 text-xs font-medium uppercase tracking-[0.15em] transition-colors hover:text-gold',
+      active ? 'border-gold text-gold' : 'border-transparent text-white/85',
+    );
+
   return (
     <header className="sticky top-0 z-40 border-b-2 border-gold bg-navy">
       {announcement && (
@@ -96,7 +130,7 @@ export function Navbar({ announcement }: { announcement?: string | null }) {
         </div>
       )}
 
-      <nav className="container-page flex h-16 items-center justify-between gap-4 sm:h-20">
+      <nav className="container-page relative flex h-16 items-center justify-between gap-4 sm:h-20">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -112,26 +146,83 @@ export function Navbar({ announcement }: { announcement?: string | null }) {
           </Link>
         </div>
 
-        <ul className="hidden items-center gap-8 lg:flex">
+        {/* ============ Desktop menu ============ */}
+        <ul className="hidden h-full items-center gap-8 lg:flex">
           {NAV_LINKS.map((link) => (
-            <li key={link.href}>
-              <Link
-                href={link.href}
-                className={cn(
-                  'border-b-2 py-1 text-xs font-medium uppercase tracking-[0.15em] transition-colors hover:text-gold',
-                  isActive(link.href) ? 'border-gold text-gold' : 'border-transparent text-white/85',
-                )}
-              >
+            <li key={link.href} className="flex h-full items-center">
+              <Link href={link.href} className={desktopLink(isActive(link.href))}>
                 {link.label}
               </Link>
             </li>
           ))}
+
+          {/* Browse — mega menu */}
+          <li
+            ref={browseRef}
+            className="flex h-full items-center"
+            onMouseEnter={() => setBrowseOpen(true)}
+            onMouseLeave={() => setBrowseOpen(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setBrowseOpen((v) => !v)}
+              aria-expanded={browseOpen}
+              aria-haspopup="true"
+              className={cn('flex items-center gap-1', desktopLink(onCollections || browseOpen))}
+            >
+              Browse
+              <ChevronDown size={14} className={cn('transition-transform', browseOpen && 'rotate-180')} />
+            </button>
+
+            {browseOpen && (
+              <div className="absolute inset-x-0 top-full z-50 border-t-2 border-gold bg-white text-navy shadow-2xl">
+                <div className="px-4 py-8 sm:px-6 lg:px-8">
+                  {groups.length === 0 ? (
+                    <p className="text-sm text-navy/60">Collections are coming soon.</p>
+                  ) : (
+                    <div className={cn('grid gap-8', groups.length >= 3 ? 'grid-cols-3' : groups.length === 2 ? 'grid-cols-2' : 'grid-cols-1')}>
+                      {groups.map((g) => (
+                        <div key={g.group}>
+                          <p className="border-b border-gold/50 pb-2 text-[11px] font-bold uppercase tracking-[0.25em] text-gold-dark">
+                            {g.label}
+                          </p>
+                          <ul className="mt-3 space-y-1">
+                            {g.items.map((c) => (
+                              <li key={c._id}>
+                                <Link
+                                  href={`/collections/${c.slug}`}
+                                  className={cn(
+                                    'block py-1.5 text-sm transition-colors hover:translate-x-1 hover:text-gold-dark',
+                                    pathname === `/collections/${c.slug}` ? 'font-semibold text-gold-dark' : 'text-navy',
+                                  )}
+                                >
+                                  {c.name}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-6 border-t border-navy/10 pt-4">
+                    <Link
+                      href="/collections"
+                      className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-navy underline decoration-gold decoration-2 underline-offset-4 hover:text-gold-dark"
+                    >
+                      View all collections <ArrowRight size={14} />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+          </li>
         </ul>
 
         <div className="flex items-center gap-1 sm:gap-2">
           <Link
             href="/perfumes?focus=search"
-            aria-label="Search perfumes"
+            aria-label="Search products"
             className="flex h-10 w-10 items-center justify-center text-white hover:text-gold"
           >
             <Search size={20} />
@@ -220,7 +311,7 @@ export function Navbar({ announcement }: { announcement?: string | null }) {
           </div>
 
           <ul className="flex-1 overflow-y-auto py-2">
-            {[...NAV_LINKS, { href: '/cart', label: 'Cart' }].map((link) => (
+            {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}
@@ -233,6 +324,66 @@ export function Navbar({ announcement }: { announcement?: string | null }) {
                 </Link>
               </li>
             ))}
+
+            {/* Browse — collections accordion */}
+            <li>
+              <button
+                type="button"
+                onClick={() => setMobileBrowseOpen((v) => !v)}
+                aria-expanded={mobileBrowseOpen}
+                className={cn(
+                  'flex w-full items-center justify-between border-b border-navy/5 px-5 py-4 text-left text-sm font-semibold uppercase tracking-[0.15em]',
+                  onCollections ? 'border-l-4 border-l-gold bg-gold/15 text-navy' : 'text-navy hover:text-gold-dark',
+                )}
+              >
+                Browse
+                <ChevronDown size={18} className={cn('text-gold-dark transition-transform', mobileBrowseOpen && 'rotate-180')} />
+              </button>
+
+              {mobileBrowseOpen && (
+                <div className="border-b border-navy/5 bg-surface px-5 py-3">
+                  {groups.length === 0 ? (
+                    <p className="py-2 text-sm text-navy/60">Collections are coming soon.</p>
+                  ) : (
+                    groups.map((g) => (
+                      <div key={g.group} className="py-2">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold-dark">{g.label}</p>
+                        <ul className="mt-1">
+                          {g.items.map((c) => (
+                            <li key={c._id}>
+                              <Link
+                                href={`/collections/${c.slug}`}
+                                className={cn(
+                                  'block border-l-2 py-2 pl-3 text-sm',
+                                  pathname === `/collections/${c.slug}` ? 'border-gold font-semibold text-gold-dark' : 'border-transparent text-navy hover:text-gold-dark',
+                                )}
+                              >
+                                {c.name}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))
+                  )}
+                  <Link href="/collections" className="mt-2 inline-flex items-center gap-2 py-2 text-xs font-semibold uppercase tracking-wider text-navy underline decoration-gold decoration-2 underline-offset-4">
+                    View all collections <ArrowRight size={14} />
+                  </Link>
+                </div>
+              )}
+            </li>
+
+            <li>
+              <Link
+                href="/cart"
+                className={cn(
+                  'flex items-center border-b border-navy/5 px-5 py-4 text-sm font-semibold uppercase tracking-[0.15em]',
+                  isActive('/cart') ? 'border-l-4 border-l-gold bg-gold/15 text-navy' : 'text-navy hover:text-gold-dark',
+                )}
+              >
+                Cart
+              </Link>
+            </li>
           </ul>
 
           <div className="border-t border-navy/10 bg-surface p-4">

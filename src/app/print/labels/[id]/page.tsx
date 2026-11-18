@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Printer } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { barcodeImageUrl } from '@/lib/barcode';
+import { joinParts, sizeLabel } from '@/lib/product';
 import { formatNaira } from '@/lib/utils';
 import { SITE_NAME } from '@/lib/constants';
 import type { Perfume } from '@/types';
@@ -42,10 +43,11 @@ function LabelsSheet() {
   }, [perfume, variantId, copies, showBarcode]);
 
   if (isLoading) return <p className="p-8 text-center text-sm">Loading labels…</p>;
-  if (isError || !perfume) return <p className="p-8 text-center text-sm text-error">{getErrorMessage(error, 'Could not load perfume')}</p>;
+  if (isError || !perfume) return <p className="p-8 text-center text-sm text-error">{getErrorMessage(error, 'Could not load product')}</p>;
 
   const dims = SIZES[size];
   const qrOnly = !showBarcode && showQr;
+  const multipleOptions = perfume.variants.length > 1;
 
   return (
     <div className="min-h-screen bg-surface print:bg-white">
@@ -59,15 +61,17 @@ function LabelsSheet() {
             <p className="font-serif text-lg">{perfume.name}</p>
           </div>
           <div className="flex flex-wrap items-end gap-3 text-xs">
+            {multipleOptions && (
+              <label className="flex flex-col gap-1">
+                Size
+                <select value={variantId} onChange={(e) => setVariantId(e.target.value)} className="h-9 bg-white px-2 text-navy">
+                  <option value="all">All sizes</option>
+                  {perfume.variants.map((v) => <option key={v._id} value={v._id}>{sizeLabel(v.size) || 'Single price'}</option>)}
+                </select>
+              </label>
+            )}
             <label className="flex flex-col gap-1">
-              Size
-              <select value={variantId} onChange={(e) => setVariantId(e.target.value)} className="h-9 bg-white px-2 text-navy">
-                <option value="all">All sizes</option>
-                {perfume.variants.map((v) => <option key={v._id} value={v._id}>{v.size}ml</option>)}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              Copies each
+              Copies{multipleOptions ? ' each' : ''}
               <input type="number" min={1} max={100} value={copies} onChange={(e) => setCopies(Math.min(100, Math.max(1, Number(e.target.value) || 1)))} className="h-9 w-20 bg-white px-2 text-navy" />
             </label>
             <label className="flex flex-col gap-1">
@@ -99,44 +103,47 @@ function LabelsSheet() {
         {!showBarcode && !showQr ? (
           <p className="p-8 text-center text-sm">Tick Barcode, QR, or both.</p>
         ) : labels.length === 0 ? (
-          <p className="p-8 text-center text-sm">No barcodes yet — save the perfume in the admin panel first.</p>
+          <p className="p-8 text-center text-sm">No barcodes yet — save the product in the admin panel first.</p>
         ) : (
           <div className="flex flex-wrap gap-[2mm] bg-white p-[4mm] print:p-0">
-            {labels.map(({ key, variant }) => (
-              <div
-                key={key}
-                className="flex overflow-hidden border border-dashed border-navy/30 bg-white text-black print:border-black/20"
-                style={{ width: `${dims.w}mm`, height: `${dims.h}mm`, padding: '1.5mm', breakInside: 'avoid' }}
-              >
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <p className="truncate font-bold uppercase leading-tight" style={{ fontSize: `${dims.h / 6.5}pt` }}>{perfume.brand?.name}</p>
-                  <p className={qrOnly ? 'line-clamp-2 leading-tight' : 'truncate leading-tight'} style={{ fontSize: `${dims.h / 5.5}pt` }}>
-                    {perfume.name}
-                  </p>
-                  <p className="font-semibold leading-tight" style={{ fontSize: `${dims.h / 5.5}pt` }}>
-                    {variant.size}ml{showPrice ? ` · ${formatNaira(variant.price)}` : ''}
-                  </p>
-                  {showBarcode && variant.barcode ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={barcodeImageUrl(perfume._id, variant._id)} alt={variant.barcode} className="mt-auto w-full object-contain" style={{ height: '55%' }} />
-                  ) : (
-                    <p className="mt-auto leading-tight" style={{ fontSize: `${dims.h / 7}pt` }}>
-                      Genuine product from {SITE_NAME}
+            {labels.map(({ key, variant }) => {
+              const detail = joinParts(sizeLabel(variant.size), showPrice && formatNaira(variant.price));
+              return (
+                <div
+                  key={key}
+                  className="flex overflow-hidden border border-dashed border-navy/30 bg-white text-black print:border-black/20"
+                  style={{ width: `${dims.w}mm`, height: `${dims.h}mm`, padding: '1.5mm', breakInside: 'avoid' }}
+                >
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <p className="truncate font-bold uppercase leading-tight" style={{ fontSize: `${dims.h / 6.5}pt` }}>{perfume.brand?.name}</p>
+                    <p className={qrOnly ? 'line-clamp-2 leading-tight' : 'truncate leading-tight'} style={{ fontSize: `${dims.h / 5.5}pt` }}>
+                      {perfume.name}
                     </p>
+                    {detail && (
+                      <p className="font-semibold leading-tight" style={{ fontSize: `${dims.h / 5.5}pt` }}>{detail}</p>
+                    )}
+                    {showBarcode && variant.barcode ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={barcodeImageUrl(perfume._id, variant._id)} alt={variant.barcode} className="mt-auto w-full object-contain" style={{ height: '55%' }} />
+                    ) : (
+                      <p className="mt-auto leading-tight" style={{ fontSize: `${dims.h / 7}pt` }}>
+                        Genuine product from {SITE_NAME}
+                      </p>
+                    )}
+                  </div>
+                  {showQr && perfume.qrCode?.url && (
+                    <div
+                      className="ml-[1.5mm] flex shrink-0 flex-col items-center justify-center"
+                      style={{ width: `${qrOnly ? dims.h * 0.85 : dims.h * 0.42}mm` }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={perfume.qrCode.url} alt="QR" className="w-full" />
+                      <p className="mt-[0.5mm] text-center leading-tight" style={{ fontSize: qrOnly ? '6pt' : '4.5pt' }}>Scan to verify</p>
+                    </div>
                   )}
                 </div>
-                {showQr && perfume.qrCode?.url && (
-                  <div
-                    className="ml-[1.5mm] flex shrink-0 flex-col items-center justify-center"
-                    style={{ width: `${qrOnly ? dims.h * 0.85 : dims.h * 0.42}mm` }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={perfume.qrCode.url} alt="QR" className="w-full" />
-                    <p className="mt-[0.5mm] text-center leading-tight" style={{ fontSize: qrOnly ? '6pt' : '4.5pt' }}>Scan to verify</p>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         <p className="mt-3 text-center text-xs text-navy/50 print:hidden">

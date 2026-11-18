@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useQuery } from '@tanstack/react-query';
 import { useFieldArray, useForm } from 'react-hook-form';
@@ -10,13 +10,14 @@ import { api, getErrorMessage } from '@/lib/api';
 import { CONCENTRATION_LABELS, GENDER_LABELS, LONGEVITY_LABELS, SILLAGE_LABELS } from '@/lib/labels';
 import { MAX_IMAGE_SIZE_MB } from '@/lib/constants';
 import { isValidGtin } from '@/lib/barcode';
+import { COLLECTION_GROUP_LABELS, COLLECTION_GROUP_ORDER, PRODUCT_TYPE_LABELS, isSizedType } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Modal, fieldClass } from './admin-ui';
-import type { Brand, Category, Paginated, Perfume } from '@/types';
+import type { Brand, Category, Paginated, Perfume, ProductType } from '@/types';
+import type { ProductCollection } from '@/types/collection';
 
-// Camera scanner only loads when opened (keeps the form light)
 const CameraScanner = dynamic(() => import('./barcode-scanner').then((m) => m.CameraScanner), {
   ssr: false,
   loading: () => (
@@ -37,6 +38,8 @@ interface VariantField {
 }
 
 interface FormValues {
+  productType: ProductType;
+  collection: string;
   name: string;
   brand: string;
   category: string;
@@ -60,6 +63,8 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
 const emptyVariant: VariantField = { size: '', price: '', compareAtPrice: '', stock: '', sku: '', barcode: '' };
 
 const toFormValues = (p?: Perfume): FormValues => ({
+  productType: p?.productType ?? 'perfume',
+  collection: p?.collection?._id ?? '',
   name: p?.name ?? '',
   brand: p?.brand?._id ?? '',
   category: p?.category?._id ?? '',
@@ -78,7 +83,7 @@ const toFormValues = (p?: Perfume): FormValues => ({
   variants: p?.variants.length
     ? p.variants.map((v) => ({
         _id: v._id,
-        size: String(v.size),
+        size: v.size > 0 ? String(v.size) : '',
         price: String(v.price),
         compareAtPrice: v.compareAtPrice ? String(v.compareAtPrice) : '',
         stock: String(v.stock),
@@ -92,27 +97,34 @@ const splitNotes = (text: string) => text.split(',').map((n) => n.trim()).filter
 const digitsOnly = (s: string) => s.replace(/\D/g, '');
 
 function toPayload(v: FormValues) {
+  const sized = isSizedType(v.productType);
+  const variants = (sized ? v.variants : v.variants.slice(0, 1)).map((x) => ({
+    ...(x._id && { _id: x._id }),
+    size: sized ? Number(x.size) : 0,
+    price: Number(x.price),
+    ...(x.compareAtPrice && { compareAtPrice: Number(x.compareAtPrice) }),
+    stock: Number(x.stock),
+    ...(x.sku.trim() && { sku: x.sku.trim() }),
+    ...(digitsOnly(x.barcode) && { barcode: digitsOnly(x.barcode) }),
+  }));
+
   return {
+    productType: v.productType,
+    ...(v.collection && { collection: v.collection }),
     name: v.name.trim(),
     brand: v.brand,
-    category: v.category,
+    ...(v.category && { category: v.category }),
     description: v.description.trim(),
     ...(v.shortDescription.trim() && { shortDescription: v.shortDescription.trim() }),
-    gender: v.gender,
-    concentration: v.concentration,
-    ...(v.fragranceFamily.trim() && { fragranceFamily: v.fragranceFamily.trim() }),
-    ...(v.longevity && { longevity: v.longevity }),
-    ...(v.sillage && { sillage: v.sillage }),
-    notes: { top: splitNotes(v.topNotes), middle: splitNotes(v.middleNotes), base: splitNotes(v.baseNotes) },
-    variants: v.variants.map((x) => ({
-      ...(x._id && { _id: x._id }),
-      size: Number(x.size),
-      price: Number(x.price),
-      ...(x.compareAtPrice && { compareAtPrice: Number(x.compareAtPrice) }),
-      stock: Number(x.stock),
-      ...(x.sku.trim() && { sku: x.sku.trim() }),
-      ...(digitsOnly(x.barcode) && { barcode: digitsOnly(x.barcode) }), // empty = auto-generate
-    })),
+    ...(sized && {
+      gender: v.gender,
+      concentration: v.concentration,
+      ...(v.fragranceFamily.trim() && { fragranceFamily: v.fragranceFamily.trim() }),
+      ...(v.longevity && { longevity: v.longevity }),
+      ...(v.sillage && { sillage: v.sillage }),
+      notes: { top: splitNotes(v.topNotes), middle: splitNotes(v.middleNotes), base: splitNotes(v.baseNotes) },
+    }),
+    variants,
     isFeatured: v.isFeatured,
     isActive: v.isActive,
   };
@@ -145,11 +157,24 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
     queryKey: ['admin-category-options'],
     queryFn: async () => (await api.get<Paginated<Category>>('/categories/admin', { params: { limit: 100 } })).data.data,
   });
+  const collectionsQuery = useQuery({
+    queryKey: ['admin-collection-options'],
+    queryFn: async () => (await api.get<ProductCollection[]>('/collections/admin')).data,
+  });
 
-  const { register, control, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormValues>({
+  const { register, control, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormValues>({
     defaultValues: toFormValues(initial),
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'variants' });
+
+  const productType = watch('productType');
+  const sized = isSizedType(productType);
+  const visibleFields = sized ? fields : fields.slice(0, 1);
+
+  const collectionGroups = useMemo(
+    () => COLLECTION_GROUP_ORDER.map((g) => ({ group: g, items: (collectionsQuery.data ?? []).filter((c) => c.group === g) })),
+    [collectionsQuery.data],
+  );
 
   useEffect(() => {
     if (initial) reset(toFormValues(initial));
@@ -181,7 +206,6 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
     }
   };
 
-  /** Box barcode read by the camera */
   const onCameraScan = (raw: string) => {
     const code = digitsOnly(raw);
     if (scanIndex === null) return;
@@ -212,14 +236,14 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
         });
         images.forEach(({ file }) => fd.append('images', file));
         saved = (await api.post<Perfume>('/perfumes', fd)).data;
-        toast.success('Perfume created — QR code and barcodes ready');
+        toast.success('Product created — QR code and barcode ready');
       } else {
         saved = (await api.patch<Perfume>(`/perfumes/${initial!._id}`, payload)).data;
-        toast.success('Perfume updated');
+        toast.success('Product updated');
       }
       onSaved(saved);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Could not save perfume'));
+      toast.error(getErrorMessage(error, 'Could not save product'));
     } finally {
       setSaving(false);
     }
@@ -231,10 +255,31 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-8">
+      {/* Type & collection */}
+      <div className="grid gap-5 border-l-4 border-gold bg-surface p-4 sm:grid-cols-2">
+        <Field label="Product type" hint={sized ? 'Sold in ml sizes, with fragrance notes' : 'One price — no ml sizes or fragrance notes'}>
+          <select className={select()} {...register('productType')}>{options(PRODUCT_TYPE_LABELS)}</select>
+        </Field>
+        <Field label="Collection" error={errors.collection?.message} hint="Where it appears under “Browse”">
+          <select className={select(!!errors.collection)} {...register('collection', { required: 'Choose a collection' })}>
+            <option value="">Select collection</option>
+            {collectionGroups.map(({ group, items }) =>
+              items.length ? (
+                <optgroup key={group} label={COLLECTION_GROUP_LABELS[group]}>
+                  {items.map((c) => (
+                    <option key={c._id} value={c._id}>{c.name}{!c.isActive ? ' (hidden)' : ''}</option>
+                  ))}
+                </optgroup>
+              ) : null,
+            )}
+          </select>
+        </Field>
+      </div>
+
       {/* Basics */}
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Name" error={errors.name?.message} className="sm:col-span-2">
-          <input className={input(!!errors.name)} placeholder="e.g. Sauvage Elixir" {...register('name', { required: 'Name is required' })} />
+          <input className={input(!!errors.name)} placeholder={sized ? 'e.g. Sauvage Elixir' : 'e.g. Oud Mirror Diffuser'} {...register('name', { required: 'Name is required' })} />
         </Field>
         <Field label="Brand" error={errors.brand?.message}>
           <select className={select(!!errors.brand)} {...register('brand', { required: 'Select a brand' })}>
@@ -242,19 +287,28 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
             {brandsQuery.data?.map((b) => <option key={b._id} value={b._id}>{b.name}{!b.isActive ? ' (hidden)' : ''}</option>)}
           </select>
         </Field>
-        <Field label="Category / family" error={errors.category?.message}>
-          <select className={select(!!errors.category)} {...register('category', { required: 'Select a category' })}>
-            <option value="">Select category</option>
+        <Field label={sized ? 'Fragrance family' : 'Fragrance family (optional)'} error={errors.category?.message}>
+          <select
+            className={select(!!errors.category)}
+            {...register('category', { validate: (v, values) => !isSizedType(values.productType) || !!v || 'Select a fragrance family' })}
+          >
+            <option value="">{sized ? 'Select family' : 'None'}</option>
             {categoriesQuery.data?.map((c) => <option key={c._id} value={c._id}>{c.name}{!c.isActive ? ' (hidden)' : ''}</option>)}
           </select>
         </Field>
-        <Field label="Gender"><select className={select()} {...register('gender')}>{options(GENDER_LABELS)}</select></Field>
-        <Field label="Concentration"><select className={select()} {...register('concentration')}>{options(CONCENTRATION_LABELS)}</select></Field>
-        <Field label="Fragrance type" hint="e.g. Aromatic Fougère"><input className={input()} {...register('fragranceFamily')} /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Longevity"><select className={select()} {...register('longevity')}><option value="">—</option>{options(LONGEVITY_LABELS)}</select></Field>
-          <Field label="Sillage"><select className={select()} {...register('sillage')}><option value="">—</option>{options(SILLAGE_LABELS)}</select></Field>
-        </div>
+
+        {sized && (
+          <>
+            <Field label="Gender"><select className={select()} {...register('gender')}>{options(GENDER_LABELS)}</select></Field>
+            <Field label="Concentration"><select className={select()} {...register('concentration')}>{options(CONCENTRATION_LABELS)}</select></Field>
+            <Field label="Fragrance type" hint="e.g. Aromatic Fougère"><input className={input()} {...register('fragranceFamily')} /></Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Longevity"><select className={select()} {...register('longevity')}><option value="">—</option>{options(LONGEVITY_LABELS)}</select></Field>
+              <Field label="Sillage"><select className={select()} {...register('sillage')}><option value="">—</option>{options(SILLAGE_LABELS)}</select></Field>
+            </div>
+          </>
+        )}
+
         <Field label="Short description" hint="Shown under the name (max 200)" className="sm:col-span-2">
           <input className={input()} maxLength={200} {...register('shortDescription')} />
         </Field>
@@ -263,34 +317,56 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
         </Field>
       </div>
 
-      {/* Notes */}
-      <div>
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-gold-dark">
-          Fragrance notes <span className="font-normal normal-case text-navy/50">(comma separated)</span>
-        </h3>
-        <div className="grid gap-4 md:grid-cols-3">
-          <Field label="Top notes"><input className={input()} placeholder="Bergamot, Pepper" {...register('topNotes')} /></Field>
-          <Field label="Heart notes"><input className={input()} placeholder="Lavender, Geranium" {...register('middleNotes')} /></Field>
-          <Field label="Base notes"><input className={input()} placeholder="Amber, Vanilla" {...register('baseNotes')} /></Field>
+      {/* Notes — perfumes & oils only */}
+      {sized && (
+        <div>
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-gold-dark">
+            Fragrance notes <span className="font-normal normal-case text-navy/50">(comma separated)</span>
+          </h3>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Top notes"><input className={input()} placeholder="Bergamot, Pepper" {...register('topNotes')} /></Field>
+            <Field label="Heart notes"><input className={input()} placeholder="Lavender, Geranium" {...register('middleNotes')} /></Field>
+            <Field label="Base notes"><input className={input()} placeholder="Amber, Vanilla" {...register('baseNotes')} /></Field>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Variants */}
+      {/* Prices */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-gold-dark">Sizes, prices, stock & barcodes</h3>
-          <button type="button" onClick={() => append({ ...emptyVariant })} disabled={fields.length >= 10} className="inline-flex items-center gap-1 text-xs font-semibold uppercase text-navy hover:text-gold-dark disabled:opacity-40">
-            <Plus size={14} /> Add size
-          </button>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-gold-dark">
+            {sized ? 'Sizes, prices, stock & barcodes' : 'Price, stock & barcode'}
+          </h3>
+          {sized && (
+            <button type="button" onClick={() => append({ ...emptyVariant })} disabled={fields.length >= 10} className="inline-flex items-center gap-1 text-xs font-semibold uppercase text-navy hover:text-gold-dark disabled:opacity-40">
+              <Plus size={14} /> Add size
+            </button>
+          )}
         </div>
+
+        {!sized && fields.length > 1 && (
+          <p className="mb-3 border-l-4 border-gold bg-gold/10 p-2 text-xs">
+            This product type has one price — only the first one below is kept when you save.
+          </p>
+        )}
+
         <div className="space-y-3">
-          {fields.map((field, i) => {
+          {visibleFields.map((field, i) => {
             const e = errors.variants?.[i];
             return (
-              <div key={field.id} className="grid grid-cols-2 gap-3 border border-navy/10 bg-surface p-3 sm:grid-cols-3 lg:grid-cols-5 lg:items-start">
-                <Field label="Size (ml)" error={e?.size?.message}>
-                  <input type="number" inputMode="numeric" className={input(!!e?.size)} {...register(`variants.${i}.size`, { required: 'Required', validate: (v) => Number(v) >= 1 || 'Min 1' })} />
-                </Field>
+              <div key={field.id} className={cn('grid grid-cols-2 gap-3 border border-navy/10 bg-surface p-3 sm:grid-cols-3 lg:items-start', sized ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
+                {sized && (
+                  <Field label="Size (ml)" error={e?.size?.message}>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      className={input(!!e?.size)}
+                      {...register(`variants.${i}.size`, {
+                        validate: (v, values) => !isSizedType(values.productType) || Number(v) >= 1 || 'Enter ml',
+                      })}
+                    />
+                  </Field>
+                )}
                 <Field label="Price (₦)" error={e?.price?.message}>
                   <input type="number" inputMode="numeric" className={input(!!e?.price)} {...register(`variants.${i}.price`, { required: 'Required', validate: (v) => Number(v) >= 0 || 'Invalid' })} />
                 </Field>
@@ -308,14 +384,13 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
                   label="Barcode"
                   error={e?.barcode?.message}
                   hint="Scan the box barcode — or leave empty to auto-generate"
-                  className="col-span-2 sm:col-span-3 lg:col-span-5"
+                  className={cn('col-span-2 sm:col-span-3', sized ? 'lg:col-span-5' : 'lg:col-span-4')}
                 >
                   <div className="flex gap-1">
                     <input
                       inputMode="numeric"
                       placeholder="Scan box barcode or leave empty"
                       className={cn(input(!!e?.barcode), 'min-w-0 font-mono')}
-                      // USB scanners press Enter after the digits — don't submit the form
                       onKeyDown={(ev) => {
                         if (ev.key === 'Enter') ev.preventDefault();
                       }}
@@ -332,23 +407,21 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
                   </div>
                 </Field>
 
-                <button
-                  type="button"
-                  onClick={() => remove(i)}
-                  disabled={fields.length === 1}
-                  aria-label="Remove size"
-                  className="col-span-2 flex h-10 items-center justify-center gap-1 border border-error/40 text-xs font-semibold uppercase text-error hover:bg-error hover:text-white disabled:opacity-30 sm:col-span-3 lg:col-span-5"
-                >
-                  <Trash2 size={14} /> Remove this size
-                </button>
+                {sized && (
+                  <button
+                    type="button"
+                    onClick={() => remove(i)}
+                    disabled={fields.length === 1}
+                    aria-label="Remove size"
+                    className="col-span-2 flex h-10 items-center justify-center gap-1 border border-error/40 text-xs font-semibold uppercase text-error hover:bg-error hover:text-white disabled:opacity-30 sm:col-span-3 lg:col-span-5"
+                  >
+                    <Trash2 size={14} /> Remove this size
+                  </button>
+                )}
               </div>
             );
           })}
         </div>
-        <p className="mt-2 text-xs text-navy/50">
-          If the box already has a barcode, scan it (USB scanner or <Camera size={11} className="inline" />) — that size will use the
-          manufacturer’s barcode. No barcode on the box? Leave it empty and one is created for you.
-        </p>
       </div>
 
       {/* Images (create only — edit page has its own manager) */}
@@ -387,12 +460,12 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
 
       <div className="flex flex-col gap-2 border-t border-navy/10 pt-6 xs:flex-row">
         <Button type="submit" variant="gold" size="lg" loading={saving}>
-          {mode === 'create' ? 'Create perfume' : 'Save changes'}
+          {mode === 'create' ? 'Create product' : 'Save changes'}
         </Button>
       </div>
 
       <Modal open={scanIndex !== null} onClose={() => setScanIndex(null)} title="Scan the box barcode">
-        <p className="mb-3 text-sm text-navy/65">Hold the barcode on the perfume box inside the frame, steady and well lit.</p>
+        <p className="mb-3 text-sm text-navy/65">Hold the barcode on the box inside the frame, steady and well lit.</p>
         {scanIndex !== null && <CameraScanner onDetected={onCameraScan} />}
       </Modal>
     </form>

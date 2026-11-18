@@ -32,7 +32,7 @@ export function Footer({ settings }: { settings: PublicSettings }) {
           </p>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/65">{SITE_TAGLINE}</p>
           <p className="mt-4 max-w-xs text-xs leading-relaxed text-white/55">
-            Every bottle carries a unique QR code. Scan it to confirm it came from us.
+            Every NORÚ product carries a unique QR code. Scan it to confirm it came from us.
           </p>
         </div>
 

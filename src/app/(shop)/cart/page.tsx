@@ -7,6 +7,7 @@ import { Info, ShoppingBag, Trash2 } from 'lucide-react';
 import { useCart, type CartLine } from '@/hooks/use-cart';
 import { usePublicSettings } from '@/hooks/use-public-settings';
 import { getErrorMessage } from '@/lib/api';
+import { joinParts, sizeLabel } from '@/lib/product';
 import { formatNaira } from '@/lib/utils';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { PageLoader } from '@/components/ui/spinner';
@@ -31,9 +32,9 @@ export default function CartPage() {
         <span className="flex h-16 w-16 items-center justify-center bg-navy text-gold"><ShoppingBag size={28} /></span>
         <h1 className="mt-6 text-3xl font-medium sm:text-4xl">Your bag is empty</h1>
         <div className="mt-3 h-0.5 w-14 bg-gold" />
-        <p className="mt-4 max-w-sm text-sm text-navy/60">Discover a fragrance you love and it will appear here.</p>
-        <Link href="/perfumes" className="mt-8 inline-flex h-12 items-center bg-navy px-8 text-sm font-semibold uppercase tracking-wider text-gold hover:bg-gold hover:text-navy">
-          Start shopping
+        <p className="mt-4 max-w-sm text-sm text-navy/60">Discover a product you love and it will appear here.</p>
+        <Link href="/collections" className="mt-8 inline-flex h-12 items-center bg-navy px-8 text-sm font-semibold uppercase tracking-wider text-gold hover:bg-gold hover:text-navy">
+          Explore our collections
         </Link>
       </div>
     );
@@ -112,7 +113,7 @@ export default function CartPage() {
 
           {!isAuthed && <p className="mt-3 text-center text-xs text-white/60">Your bag is saved and will be waiting after you log in.</p>}
 
-          <Link href="/perfumes" className="mt-4 block text-center text-xs font-semibold uppercase tracking-wider text-gold underline underline-offset-4 hover:text-gold-light">
+          <Link href="/collections" className="mt-4 block text-center text-xs font-semibold uppercase tracking-wider text-gold underline underline-offset-4 hover:text-gold-light">
             Continue shopping
           </Link>
         </aside>
@@ -136,7 +137,7 @@ function CartRow({ line, disabled, onQuantity, onRemove }: { line: CartLine; dis
         <div className="min-w-0">
           {line.brandName && <p className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-gold-dark sm:text-xs">{line.brandName}</p>}
           <Link href={`/perfumes/${line.slug}`} className="mt-0.5 line-clamp-2 font-serif text-base hover:text-gold-dark sm:text-lg">{line.name}</Link>
-          <p className="mt-1 text-xs text-navy/55 sm:text-sm">{line.size}ml · {formatNaira(line.unitPrice)}</p>
+          <p className="mt-1 text-xs text-navy/55 sm:text-sm">{joinParts(sizeLabel(line.size), formatNaira(line.unitPrice))}</p>
           {!line.inStock && <p className="mt-2 text-xs font-semibold text-error">Sold out — please remove</p>}
         </div>
 

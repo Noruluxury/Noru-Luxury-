@@ -8,9 +8,12 @@ import { InfoPage, Prose } from '@/components/info/info-page';
 
 export const metadata: Metadata = {
   title: 'Delivery & returns',
-  description: 'Delivery fees by state, delivery times, payment windows and our returns policy.',
+  description: 'Delivery fees by state, delivery times, payment window, returns, exchanges and refunds.',
   alternates: { canonical: '/delivery-returns' },
 };
+
+const FALLBACK_EMAIL = 'noruluxury01@gmail.com';
+const FALLBACK_DAYS = '2–7 working days';
 
 export default async function DeliveryReturnsPage() {
   const { delivery, contact, whatsapp } = await getPublicSettings();
@@ -18,66 +21,84 @@ export default async function DeliveryReturnsPage() {
   const customFee = new Map(delivery.stateFees.map((f) => [f.state.toLowerCase(), f.fee]));
   const feeFor = (state: string) => customFee.get(state.toLowerCase()) ?? delivery.defaultFee;
 
+  const email = contact.email || FALLBACK_EMAIL;
+  const days = delivery.estimatedDays || FALLBACK_DAYS;
+
   return (
-    <InfoPage eyebrow="Help" title="Delivery & returns" description="Everything about getting your fragrance to you — and what happens if something isn’t right.">
+    <InfoPage
+      eyebrow="Help"
+      title="Delivery & returns"
+      description="Everything you need to know about receiving your order — and what happens if something isn’t right."
+    >
       <div className="grid gap-12 lg:grid-cols-[1.2fr_1fr] lg:gap-16">
         <Prose>
           <h2>Delivery</h2>
-          <p>We deliver to all 36 states and the FCT.</p>
           <ul>
+            <li>We deliver to all 36 states of Nigeria and the Federal Capital Territory (FCT).</li>
             {free ? (
-              <li><strong>Delivery is free</strong> on every order.</li>
+              <li><strong>Delivery is currently free</strong> on every order.</li>
             ) : (
-              <>
-                <li>Delivery fees depend on your state — see the table. The exact fee is shown at checkout before you pay.</li>
-                {delivery.freeShippingMin > 0 && (
-                  <li><strong>Free delivery</strong> on orders of {formatNaira(delivery.freeShippingMin)} or more.</li>
-                )}
-              </>
+              <li>Delivery fees vary by location. The applicable fee will be displayed at checkout before payment.</li>
             )}
-            {delivery.estimatedDays && <li>Estimated delivery time: <strong>{delivery.estimatedDays}</strong> after payment is confirmed.</li>}
-            <li>We’ll email you when your order ships and when it’s delivered. You can also follow it in <Link href="/orders">My orders</Link>.</li>
+            {!free && delivery.freeShippingMin > 0 && (
+              <li><strong>Free delivery</strong> on orders of {formatNaira(delivery.freeShippingMin)} or more.</li>
+            )}
+            <li>Estimated delivery time is <strong>{days}</strong> after payment is confirmed.</li>
+            <li>
+              We’ll send you email updates when your order is dispatched and delivered. You can also track its status under{' '}
+              <Link href="/orders">My Orders</Link>.
+            </li>
           </ul>
 
           <h2>Payment window</h2>
           <p>
-            Items are reserved for you as soon as you place an order. If paying by bank transfer, please complete payment and upload your
-            receipt within <strong>24 hours</strong> — unpaid orders are cancelled automatically and the items are released.
+            Items are reserved once an order is placed. For bank transfers, please complete payment and upload your payment receipt
+            within <strong>24 hours</strong>. Unpaid orders are automatically cancelled, and the reserved items are released.
           </p>
 
-          <h2>Returns & exchanges</h2>
-          <p>Because perfume is a personal-care product, we can only accept returns on items that are:</p>
+          <h2>Returns &amp; exchanges</h2>
+          <p>For hygiene and product-safety reasons, returns are accepted only when items are:</p>
           <ul>
-            <li><strong>Unopened</strong>, with the original seal and cellophane intact</li>
-            <li>Reported within <strong>7 days</strong> of delivery</li>
-            <li>In the original packaging, with the QR sticker in place</li>
+            <li><strong>Unopened</strong>, with the original seal and cellophane intact, where applicable.</li>
+            <li>Reported within <strong>7 days</strong> of delivery.</li>
+            <li>Returned in their original packaging, with the QR sticker intact, where applicable.</li>
           </ul>
-          <p>Opened or used perfumes can’t be returned unless they are faulty.</p>
+          <p>Opened or used perfumes cannot be returned unless they are faulty.</p>
 
-          <h3>Damaged, faulty or wrong item?</h3>
+          <h3>Damaged, faulty or incorrect items?</h3>
           <p>
-            Contact us within <strong>48 hours</strong> of delivery with your order number and clear photos. If an item arrived broken, leaked,
-            or isn’t what you ordered, we’ll replace it or refund you in full — including delivery.
+            Please contact us within <strong>48 hours</strong> of delivery with your order number and clear photographs of the
+            affected item.
+          </p>
+          <p>
+            If your order arrives damaged, leaking, faulty or contains an incorrect item, we’ll arrange a replacement or issue a full
+            refund, including the original delivery fee.
           </p>
 
           <h2>Refunds</h2>
           <ul>
-            <li>Approved refunds are paid to your original payment method (card via Paystack, or your bank account for transfers).</li>
-            <li>Refunds are usually processed within <strong>5–10 working days</strong> after we receive and inspect the item.</li>
-            <li>If an order is cancelled after payment (for example, an item sells out), you receive a full refund.</li>
+            <li>
+              Approved refunds will be sent to the original payment method: card payments through Paystack, or the customer’s bank
+              account for bank transfers.
+            </li>
+            <li>
+              Refunds are usually processed within <strong>5–10 working days</strong> after the returned item has been received and
+              inspected.
+            </li>
+            <li>If an order is cancelled after payment — for example, because an item is no longer available — a full refund will be issued.</li>
           </ul>
 
           <h2>Need help?</h2>
           <p>
             Reach us via the <Link href="/contact">contact page</Link>
-            {whatsapp ? ' or the WhatsApp button on any page' : ''}
-            {contact.email ? <>, or email <a href={`mailto:${contact.email}`}>{contact.email}</a></> : ''}.
+            {whatsapp ? ' or the WhatsApp button on any page' : ''}, or email <a href={`mailto:${email}`}>{email}</a>.
           </p>
         </Prose>
 
         {/* Fee table */}
         <aside className="h-fit border-t-4 border-gold bg-surface p-5 sm:p-6 lg:sticky lg:top-32">
           <h2 className="font-serif text-2xl">Delivery fees</h2>
+          <p className="mt-1 text-xs text-navy/60">Estimated delivery: {days}</p>
           {free ? (
             <p className="mt-3 text-sm">All states: <strong className="text-success">Free</strong></p>
           ) : (

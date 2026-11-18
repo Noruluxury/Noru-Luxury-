@@ -1,6 +1,6 @@
 /** Change this to your store's real name */
 export const SITE_NAME = 'Norú Luxury';
-export const SITE_TAGLINE = 'Authentic fragrances, verified by QR';
+export const SITE_TAGLINE = 'Authentic products, verified by QR';
 export const SITE_DESCRIPTION =
   'Shop authentic designer and niche perfumes in Nigeria. Every bottle carries a QR code that links to its official product page.';
 
@@ -18,12 +18,12 @@ export const MAX_IMAGE_SIZE_MB = 5;
 /** Shown at the top of Terms & Privacy — update when you change them */
 export const POLICY_LAST_UPDATED = '12 November 2026';
 
+/** Main menu — "Browse" (collections) is added by the navbar after these */
 export const NAV_LINKS = [
   { href: '/perfumes', label: 'Shop All' },
   { href: '/perfumes?gender=men', label: 'Men' },
   { href: '/perfumes?gender=women', label: 'Women' },
   { href: '/perfumes?gender=unisex', label: 'Unisex' },
-  { href: '/brands', label: 'Brands' },
 ] as const;
 
 export const INFO_LINKS = [

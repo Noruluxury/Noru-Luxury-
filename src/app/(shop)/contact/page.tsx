@@ -49,7 +49,7 @@ export default async function ContactPage() {
   ].filter(Boolean) as { key: string; icon: React.ReactNode; title: string; value: string; href: string; action: string; highlight?: boolean }[];
 
   return (
-    <InfoPage eyebrow="We’re here to help" title="Contact us" description="Questions about a fragrance, your order or delivery? Reach us any way you like.">
+    <InfoPage eyebrow="We’re here to help" title="Contact us" description="Questions about a product, your order or delivery? Reach us any way you like.">
       {cards.length === 0 && !contact.address ? (
         <p className="border-l-4 border-gold bg-gold/10 p-4 text-sm">Contact details will be available soon.</p>
       ) : (

@@ -9,16 +9,14 @@ import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser'
 import toast from 'react-hot-toast';
 import { Camera, CameraOff, Download, ExternalLink, Pencil, Printer, ScanBarcode, Wand2 } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
+import { PRODUCT_TYPE_LABELS, sizeLabel } from '@/lib/product';
 import { cn, formatNaira } from '@/lib/utils';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { AdminTitle, ActiveBadge, Panel, fieldClass } from './admin-ui';
 import type { BarcodeLookup } from '@/types/barcode';
 
-/**
- * The same box barcode can arrive as UPC-A (12 digits) or EAN-13 with a leading 0,
- * depending on the scanner — try both.
- */
+/** The same box barcode can arrive as UPC-A (12 digits) or EAN-13 with a leading 0 — try both */
 const barcodeForms = (code: string) => {
   const forms = [code];
   if (code.length === 12) forms.push(`0${code}`);
@@ -39,7 +37,7 @@ async function lookupBarcode(code: string): Promise<BarcodeLookup> {
   throw lastError;
 }
 
-/* ---------- Phone / webcam scanning (also used in the perfume form) ---------- */
+/* ---------- Phone / webcam scanning (also used in the product form) ---------- */
 export function CameraScanner({ onDetected }: { onDetected: (code: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,7 +129,6 @@ export function BarcodeScanner() {
     inputRef.current?.focus();
   }, []);
 
-  // USB scanners type the digits then press Enter — keep the box focused
   useEffect(() => inputRef.current?.focus(), []);
 
   const data = lookup.data;
@@ -196,8 +193,8 @@ export function BarcodeScanner() {
               <p className="font-semibold text-error">Not found</p>
               <p className="mt-1">{getErrorMessage(lookup.error)}</p>
               <p className="mt-2 text-xs text-navy/60">
-                New box? Open the perfume in <Link href="/admin/perfumes" className="font-semibold underline">Perfumes</Link> and scan this
-                barcode into the right size.
+                New box? Open the product in <Link href="/admin/perfumes" className="font-semibold underline">Products</Link> and scan this
+                barcode into it.
               </p>
             </div>
           ) : perfume && variant ? (
@@ -209,7 +206,10 @@ export function BarcodeScanner() {
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-dark">{perfume.brand?.name}</p>
                   <p className="font-serif text-xl leading-tight">{perfume.name}</p>
-                  <p className="mt-1 text-sm">{variant.size}ml</p>
+                  <p className="mt-1 text-sm">
+                    {sizeLabel(variant.size) || PRODUCT_TYPE_LABELS[perfume.productType ?? 'perfume']}
+                    {perfume.collection?.name && <span className="text-navy/55"> · {perfume.collection.name}</span>}
+                  </p>
                   <div className="mt-2"><ActiveBadge active={perfume.isActive} /></div>
                 </div>
               </div>
@@ -247,9 +247,9 @@ export function BarcodeScanner() {
       <Panel title="Barcode tools">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="border-t-4 border-gold bg-surface p-4">
-            <p className="font-semibold">Give remaining sizes a barcode</p>
+            <p className="font-semibold">Give remaining products a barcode</p>
             <p className="mt-1 text-sm text-navy/65">
-              Creates a new barcode for every size that still has none. <strong>First</strong> scan the box barcodes into perfumes that
+              Creates a new barcode for every price that still has none. <strong>First</strong> scan the box barcodes into products that
               have them — then use this for the rest.
             </p>
             <Button variant="primary" size="sm" className="mt-3" loading={backfill.isPending} onClick={() => backfill.mutate()}>
@@ -259,7 +259,7 @@ export function BarcodeScanner() {
           <div className="border-t-4 border-gold bg-surface p-4">
             <p className="font-semibold">Product list for supermarkets</p>
             <p className="mt-1 text-sm text-navy/65">
-              CSV with barcode, product name, brand, size and price — send it to stores so their tills show your perfumes when scanned.
+              CSV with barcode, product name, brand, size and price — send it to stores so their tills show your products when scanned.
             </p>
             <Button variant="gold" size="sm" className="mt-3" loading={exporting} onClick={exportCsv}>
               <Download size={14} /> Download barcode list (CSV)

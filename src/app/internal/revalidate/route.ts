@@ -1,13 +1,26 @@
-import { revalidateTag } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const ALLOWED_TAGS = new Set(['perfumes', 'brands', 'categories', 'settings']);
+const ALLOWED_TAGS = new Set(['perfumes', 'brands', 'categories', 'settings', 'collections']);
+
+/** Pages that show catalog data — refreshed together with the tags */
+const PATHS_FOR_TAG: Record<string, string[]> = {
+  perfumes: ['/', '/perfumes', '/perfumes/[slug]', '/collections', '/collections/[slug]', '/sitemap.xml'],
+  brands: ['/', '/brands', '/perfumes'],
+  categories: ['/', '/perfumes', '/collections'],
+  settings: ['/', '/contact', '/delivery-returns'],
+};
 
 /** Called by the NestJS backend after admin changes */
 export async function POST(request: NextRequest) {
   const secret = process.env.REVALIDATE_SECRET;
-  if (!secret || request.headers.get('x-revalidate-secret') !== secret) {
-    return NextResponse.json({ ok: false }, { status: 401 });
+
+  if (!secret) {
+    console.error('[revalidate] REVALIDATE_SECRET is not set in the frontend env');
+    return NextResponse.json({ ok: false, error: 'Frontend REVALIDATE_SECRET not set' }, { status: 500 });
+  }
+  if (request.headers.get('x-revalidate-secret') !== secret) {
+    return NextResponse.json({ ok: false, error: 'Invalid secret' }, { status: 401 });
   }
 
   const body = (await request.json().catch(() => ({}))) as { tags?: unknown };
@@ -15,7 +28,19 @@ export async function POST(request: NextRequest) {
     (tag): tag is string => typeof tag === 'string' && ALLOWED_TAGS.has(tag),
   );
 
-  tags.forEach((tag) => revalidateTag(tag, { expire: 0 }));
+  for (const tag of tags) {
+    revalidateTag(tag, { expire: 0 }); // cached API data
+
+    if (tag === 'collections') {
+      // The Browse menu is on every page — refresh the whole site
+      revalidatePath('/', 'layout');
+      continue;
+    }
+
+    for (const path of PATHS_FOR_TAG[tag] ?? []) {
+      revalidatePath(path, path.includes('[') ? 'page' : undefined);
+    }
+  }
 
   return NextResponse.json({ ok: true, revalidated: tags });
 }
