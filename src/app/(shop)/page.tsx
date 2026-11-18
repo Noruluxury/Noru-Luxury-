@@ -84,7 +84,7 @@ export default async function HomePage() {
           <div className="text-center lg:text-left">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold sm:text-sm">{SITE_NAME}</p>
             <h1 className="mt-4 text-4xl font-medium leading-[1.1] xs:text-5xl sm:text-6xl xl:text-7xl">
-              an extra to your<span className="italic text-gold">confidence</span> you.
+              an extra to your<span className="italic text-gold">confidence</span>
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-sm leading-relaxed text-white/75 sm:text-base lg:mx-0">
               Discover our carefully curated collections of designer and niche perfumes, designer and niche perfume oils,
