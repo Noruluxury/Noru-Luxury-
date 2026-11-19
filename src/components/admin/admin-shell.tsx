@@ -33,7 +33,6 @@ const NAV = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/payments', label: 'Payments', icon: Wallet },
-  { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/perfumes', label: 'Products', icon: SprayCan },
   { href: '/admin/collections', label: 'Collections', icon: LayoutGrid },
   { href: '/admin/scan', label: 'Scan barcode', icon: ScanBarcode },
