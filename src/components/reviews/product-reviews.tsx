@@ -128,7 +128,7 @@ export function ProductReviews({ perfumeId, slug }: { perfumeId: string; slug: s
           <div className="border border-navy/10 bg-surface p-5 text-sm">
             {status !== 'authenticated' ? (
               <>
-                <p className="text-navy/70">Bought this perfume? Log in to share your experience.</p>
+                <p className="text-navy/70">Bought this product? Log in to share your experience.</p>
                 <Link href={`/login?redirect=/perfumes/${slug}%23reviews`} className={buttonClasses({ size: 'sm', className: 'mt-3' })}>
                   Log in to review
                 </Link>

@@ -5,14 +5,16 @@ import { ChevronLeft, ChevronRight, PackageSearch } from 'lucide-react';
 import { serverFetch } from '@/lib/server-api';
 import { getCollection, getCollections } from '@/lib/collections';
 import { COLLECTION_GROUP_LABELS } from '@/lib/product';
+import { CONCENTRATION_LABELS } from '@/lib/labels';
 import { GALLERY_PAGE_SIZE } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/ui/page-header';
 import { PerfumeTile } from '@/components/perfume/perfume-tile';
-import type { Paginated, PerfumeCard } from '@/types';
+import { FragranceFilters } from '@/components/collections/fragrance-filters';
+import type { Category, Paginated, PerfumeCard } from '@/types';
 
 type Params = Promise<{ slug: string }>;
-type Search = Promise<{ page?: string; sort?: string }>;
+type Search = Promise<{ page?: string; sort?: string; category?: string; concentration?: string }>;
 
 const SORTS = [
   { value: 'newest', label: 'Newest' },
@@ -42,25 +44,40 @@ export default async function CollectionPage({ params, searchParams }: { params:
   const collection = await getCollection(slug);
   if (!collection) notFound();
 
+  const isFragrance = collection.group === 'fragrance';
   const sort = SORTS.some((s) => s.value === query.sort) ? query.sort! : 'newest';
   const page = Math.max(1, Number(query.page) || 1);
+  const category = isFragrance ? query.category?.trim() || undefined : undefined;
+  const concentration =
+    isFragrance && query.concentration && query.concentration in CONCENTRATION_LABELS ? query.concentration : undefined;
 
-  const [result, all] = await Promise.all([
-    serverFetch<Paginated<PerfumeCard>>(
-      `/perfumes?collection=${encodeURIComponent(slug)}&page=${page}&limit=${GALLERY_PAGE_SIZE}&sort=${sort}`,
-      { revalidate: 60 },
-    ).catch(() => ({ data: [], meta: { page, limit: GALLERY_PAGE_SIZE, total: 0, totalPages: 0 } }) as Paginated<PerfumeCard>),
+  const apiQuery =
+    `/perfumes?collection=${encodeURIComponent(slug)}&page=${page}&limit=${GALLERY_PAGE_SIZE}&sort=${sort}` +
+    (category ? `&category=${encodeURIComponent(category)}` : '') +
+    (concentration ? `&concentration=${concentration}` : '');
+
+  const [result, all, categories] = await Promise.all([
+    serverFetch<Paginated<PerfumeCard>>(apiQuery, { revalidate: 60 }).catch(
+      () => ({ data: [], meta: { page, limit: GALLERY_PAGE_SIZE, total: 0, totalPages: 0 } }) as Paginated<PerfumeCard>,
+    ),
     getCollections(),
+    isFragrance
+      ? serverFetch<Category[]>('/categories', { revalidate: 300 }).catch(() => [] as Category[])
+      : Promise.resolve([] as Category[]),
   ]);
 
   const siblings = all.filter((c) => c.group === collection.group);
   const { data: products, meta } = result;
+  const filtering = !!(category || concentration);
 
+  /** Builds links on this page, keeping sort + filters (page resets unless given) */
   const href = (next: { page?: number; sort?: string }) => {
     const p = new URLSearchParams();
     const s = next.sort ?? sort;
     const pg = next.page ?? 1;
     if (s !== 'newest') p.set('sort', s);
+    if (category) p.set('category', category);
+    if (concentration) p.set('concentration', concentration);
     if (pg > 1) p.set('page', String(pg));
     const qs = p.toString();
     return `/collections/${slug}${qs ? `?${qs}` : ''}`;
@@ -98,10 +115,24 @@ export default async function CollectionPage({ params, searchParams }: { params:
           </nav>
         )}
 
+        {/* Fragrance family + concentration — filters THIS collection only */}
+        {isFragrance && (
+          <div className="mt-6">
+            <FragranceFilters
+              basePath={`/collections/${slug}`}
+              categories={categories}
+              category={category}
+              concentration={concentration}
+              keep={{ sort: sort !== 'newest' ? sort : undefined }}
+            />
+          </div>
+        )}
+
         {/* Sort + count */}
-        <div className="mt-6 flex flex-col gap-3 border-b border-navy/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div id="products" className="mt-6 flex scroll-mt-32 flex-col gap-3 border-b border-navy/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-navy/60">
             {meta.total} product{meta.total === 1 ? '' : 's'}
+            {filtering && ' match your filters'}
           </p>
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <ul className="flex gap-2">
@@ -126,11 +157,23 @@ export default async function CollectionPage({ params, searchParams }: { params:
         {products.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-center">
             <span className="flex h-14 w-14 items-center justify-center bg-navy text-gold"><PackageSearch size={26} /></span>
-            <p className="mt-5 font-serif text-2xl">Coming soon</p>
-            <p className="mt-2 max-w-sm text-sm text-navy/60">We’re adding products to this collection. Explore our other collections in the meantime.</p>
-            <Link href="/collections" className="mt-6 inline-flex h-11 items-center bg-navy px-6 text-xs font-semibold uppercase tracking-wider text-gold hover:bg-gold hover:text-navy">
-              All collections
-            </Link>
+            {filtering ? (
+              <>
+                <p className="mt-5 font-serif text-2xl">No products match</p>
+                <p className="mt-2 max-w-sm text-sm text-navy/60">Try another fragrance family or concentration.</p>
+                <Link href={`/collections/${slug}`} className="mt-6 inline-flex h-11 items-center bg-navy px-6 text-xs font-semibold uppercase tracking-wider text-gold hover:bg-gold hover:text-navy">
+                  Clear filters
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className="mt-5 font-serif text-2xl">Coming soon</p>
+                <p className="mt-2 max-w-sm text-sm text-navy/60">We’re adding products to this collection. Explore our other collections in the meantime.</p>
+                <Link href="/collections" className="mt-6 inline-flex h-11 items-center bg-navy px-6 text-xs font-semibold uppercase tracking-wider text-gold hover:bg-gold hover:text-navy">
+                  All collections
+                </Link>
+              </>
+            )}
           </div>
         ) : (
           <ul className="mt-8 grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-6 md:grid-cols-3 lg:grid-cols-4">

@@ -59,7 +59,7 @@ export default async function PerfumesPage({ searchParams }: { searchParams: Sea
       ? singleBrand.name
       : params.gender
         ? `${GENDER_LABELS[params.gender as Gender] ?? ''} Fragrances`
-        : 'All Fragrances';
+        : 'All Products';
 
   const perfumes = gallery?.data ?? [];
   const meta = gallery?.meta ?? { page: 1, limit: GALLERY_PAGE_SIZE, total: 0, totalPages: 0 };

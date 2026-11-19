@@ -23,3 +23,5 @@ export function deliveryHeadline(d: DeliveryPricing): { title: string; text: str
   if (d.estimatedDays) parts.push(d.estimatedDays);
   return { title: 'Nationwide delivery', text: parts.join(' · ') };
 }
+
+

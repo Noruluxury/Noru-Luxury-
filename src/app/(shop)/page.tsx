@@ -82,9 +82,9 @@ export default async function HomePage() {
         <div className="pointer-events-none absolute -right-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-gold/10" />
         <div className="container-page relative grid items-center gap-10 py-14 sm:py-20 lg:grid-cols-2 lg:gap-16 lg:py-24">
           <div className="text-center lg:text-left">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold sm:text-sm">Norú Collection</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold sm:text-sm">Beyond Fragrance</p>
             <h1 className="mt-4 text-4xl font-medium leading-[1.1] xs:text-5xl sm:text-6xl xl:text-7xl">
-              an extra to your<span className="italic text-gold">confidence</span>
+              ...an extra to your<span className="italic text-gold">confidence</span>
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-sm leading-relaxed text-white/75 sm:text-base lg:mx-0">
               Discover our carefully curated collections of designer and niche perfumes, designer and niche perfume oils,

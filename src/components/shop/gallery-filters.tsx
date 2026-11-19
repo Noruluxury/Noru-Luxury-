@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Brand, Category, Concentration } from '@/types';
 
+/** category + concentration are still read from the URL (links from the Collections page) */
 const FILTER_KEYS = ['brand', 'category', 'gender', 'concentration', 'minPrice', 'maxPrice', 'inStock'];
 
 const fieldClass =
@@ -36,7 +37,7 @@ function FilterPanel({ brands, categories }: FilterProps) {
   const selectedBrands = searchParams.get('brand')?.split(',').filter(Boolean) ?? [];
   const selectedCategories = searchParams.get('category')?.split(',').filter(Boolean) ?? [];
   const gender = searchParams.get('gender') ?? '';
-  const concentration = searchParams.get('concentration') ?? '';
+  const concentration = (searchParams.get('concentration') ?? '') as Concentration | '';
   const inStock = searchParams.get('inStock') === 'true';
 
   const [minPrice, setMinPrice] = useState(searchParams.get('minPrice') ?? '');
@@ -48,9 +49,14 @@ function FilterPanel({ brands, categories }: FilterProps) {
     setMaxPrice(searchParams.get('maxPrice') ?? '');
   }, [searchParams]);
 
-  const toggleInList = (key: 'brand' | 'category', list: string[], slug: string) => {
-    const next = list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug];
-    update({ [key]: next.join(',') || null });
+  const toggleBrand = (slug: string) => {
+    const next = selectedBrands.includes(slug) ? selectedBrands.filter((s) => s !== slug) : [...selectedBrands, slug];
+    update({ brand: next.join(',') || null });
+  };
+
+  const removeCategory = (slug: string) => {
+    const next = selectedCategories.filter((s) => s !== slug);
+    update({ category: next.join(',') || null });
   };
 
   const applyPrice = (e: React.FormEvent) => {
@@ -64,6 +70,18 @@ function FilterPanel({ brands, categories }: FilterProps) {
     ...Object.entries(GENDER_LABELS).map(([value, label]) => ({ value, label })),
   ];
 
+  // Filters chosen on the Collections page (fragrance family / concentration)
+  const applied = [
+    ...selectedCategories.map((slug) => ({
+      key: `category-${slug}`,
+      label: categories.find((c) => c.slug === slug)?.name ?? slug,
+      onRemove: () => removeCategory(slug),
+    })),
+    ...(concentration
+      ? [{ key: 'concentration', label: CONCENTRATION_LABELS[concentration] ?? concentration, onRemove: () => update({ concentration: null }) }]
+      : []),
+  ];
+
   return (
     <div>
       {activeCount > 0 && (
@@ -74,6 +92,26 @@ function FilterPanel({ brands, categories }: FilterProps) {
         >
           Clear all filters ({activeCount})
         </button>
+      )}
+
+      {applied.length > 0 && (
+        <FilterSection title="Showing">
+          <ul className="flex flex-wrap gap-2">
+            {applied.map((item) => (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  onClick={item.onRemove}
+                  aria-label={`Remove ${item.label}`}
+                  className="inline-flex h-8 items-center gap-1.5 bg-navy px-3 text-xs font-semibold text-gold hover:bg-gold hover:text-navy"
+                >
+                  {item.label}
+                  <X size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </FilterSection>
       )}
 
       <FilterSection title="Gender">
@@ -107,7 +145,7 @@ function FilterPanel({ brands, categories }: FilterProps) {
                 <input
                   type="checkbox"
                   checked={selectedBrands.includes(brand.slug)}
-                  onChange={() => toggleInList('brand', selectedBrands, brand.slug)}
+                  onChange={() => toggleBrand(brand.slug)}
                   className="h-4 w-4 accent-navy"
                 />
                 <span className="truncate">{brand.name}</span>
@@ -116,44 +154,6 @@ function FilterPanel({ brands, categories }: FilterProps) {
           </div>
         </FilterSection>
       )}
-
-      {categories.length > 0 && (
-        <FilterSection title="Fragrance family">
-          <div className="max-h-56 space-y-2.5 overflow-y-auto pr-1">
-            {categories.map((category) => (
-              <label
-                key={category._id}
-                className="flex cursor-pointer items-center gap-3 text-sm text-navy/85 hover:text-gold-dark"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedCategories.includes(category.slug)}
-                  onChange={() => toggleInList('category', selectedCategories, category.slug)}
-                  className="h-4 w-4 accent-navy"
-                />
-                <span className="truncate">{category.name}</span>
-              </label>
-            ))}
-          </div>
-        </FilterSection>
-      )}
-
-      <FilterSection title="Concentration">
-        <select
-          value={concentration}
-          onChange={(e) => update({ concentration: e.target.value || null })}
-          className={fieldClass}
-        >
-          <option value="">Any concentration</option>
-          {(Object.entries(CONCENTRATION_LABELS) as [Concentration, string][]).map(
-            ([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ),
-          )}
-        </select>
-      </FilterSection>
 
       <FilterSection title="Price (₦)">
         <form onSubmit={applyPrice} className="space-y-3">
