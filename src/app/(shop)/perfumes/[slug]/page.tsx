@@ -4,10 +4,12 @@ import { notFound } from 'next/navigation';
 import { ChevronRight, QrCode, Truck } from 'lucide-react';
 import { ApiError, serverFetch } from '@/lib/server-api';
 import { getPublicSettings } from '@/lib/settings';
+import { getConcentrations } from '@/lib/concentrations';
+import { concentrationName } from '@/lib/concentration-label';
 import { deliveryHeadline } from '@/lib/delivery';
 import { absoluteUrl } from '@/lib/site';
 import { SITE_NAME } from '@/lib/constants';
-import { CONCENTRATION_LABELS, GENDER_LABELS, LONGEVITY_LABELS, SILLAGE_LABELS } from '@/lib/labels';
+import { GENDER_LABELS, LONGEVITY_LABELS, SILLAGE_LABELS } from '@/lib/labels';
 import { PRODUCT_TYPE_LABELS, isSizedType, joinParts } from '@/lib/product';
 import { ImageGallery } from '@/components/perfume/image-gallery';
 import { PurchasePanel } from '@/components/perfume/purchase-panel';
@@ -52,11 +54,12 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
   const perfume = await getPerfume(slug);
   if (!perfume) notFound();
 
-  const [related, settings] = await Promise.all([
+  const [related, settings, concentrations] = await Promise.all([
     serverFetch<PerfumeTileData[]>(`/perfumes/slug/${encodeURIComponent(slug)}/related?limit=4`, { revalidate: 120 }).catch(
       () => [] as PerfumeTileData[],
     ),
     getPublicSettings(),
+    getConcentrations(),
   ]);
 
   const type = perfume.productType ?? 'perfume';
@@ -66,8 +69,8 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
   const url = absoluteUrl(`/perfumes/${perfume.slug}`);
   const prices = perfume.variants.map((v) => v.price);
   const inStock = perfume.variants.some((v) => v.stock > 0);
+  const concentration = concentrationName(perfume.concentration, concentrations);
 
-  // Middle breadcrumb: the collection if set, otherwise the brand
   const crumb = collection
     ? { name: collection.name, href: `/collections/${collection.slug}` }
     : { name: perfume.brand.name, href: `/perfumes?brand=${perfume.brand.slug}` };
@@ -78,7 +81,7 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
     ...(sized
       ? [
           { label: 'Family', value: perfume.category?.name, href: perfume.category ? `/perfumes?category=${perfume.category.slug}` : undefined },
-          { label: 'Concentration', value: CONCENTRATION_LABELS[perfume.concentration] },
+          { label: 'Concentration', value: concentration },
           { label: 'For', value: GENDER_LABELS[perfume.gender] },
           { label: 'Fragrance type', value: perfume.fragranceFamily },
           { label: 'Longevity', value: perfume.longevity ? LONGEVITY_LABELS[perfume.longevity] : undefined },
@@ -90,9 +93,7 @@ export default async function PerfumeDetailPage({ params }: { params: Params }) 
         ]),
   ];
 
-  const subtitle = sized
-    ? joinParts(CONCENTRATION_LABELS[perfume.concentration], GENDER_LABELS[perfume.gender])
-    : joinParts(PRODUCT_TYPE_LABELS[type], collection?.name);
+  const subtitle = sized ? joinParts(concentration, GENDER_LABELS[perfume.gender]) : joinParts(PRODUCT_TYPE_LABELS[type], collection?.name);
 
   return (
     <div className="container-page pb-16 pt-5 sm:pb-24 sm:pt-8">

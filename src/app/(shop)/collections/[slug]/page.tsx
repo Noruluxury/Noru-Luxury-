@@ -4,14 +4,15 @@ import { notFound } from 'next/navigation';
 import { ChevronLeft, ChevronRight, PackageSearch } from 'lucide-react';
 import { serverFetch } from '@/lib/server-api';
 import { getCollection, getCollections } from '@/lib/collections';
+import { getConcentrations } from '@/lib/concentrations';
 import { COLLECTION_GROUP_LABELS } from '@/lib/product';
-import { CONCENTRATION_LABELS } from '@/lib/labels';
 import { GALLERY_PAGE_SIZE } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/ui/page-header';
 import { PerfumeTile } from '@/components/perfume/perfume-tile';
 import { FragranceFilters } from '@/components/collections/fragrance-filters';
 import type { Category, Paginated, PerfumeCard } from '@/types';
+import type { ConcentrationOption } from '@/types/concentration';
 
 type Params = Promise<{ slug: string }>;
 type Search = Promise<{ page?: string; sort?: string; category?: string; concentration?: string }>;
@@ -47,30 +48,27 @@ export default async function CollectionPage({ params, searchParams }: { params:
   const isFragrance = collection.group === 'fragrance';
   const sort = SORTS.some((s) => s.value === query.sort) ? query.sort! : 'newest';
   const page = Math.max(1, Number(query.page) || 1);
-  const category = isFragrance ? query.category?.trim() || undefined : undefined;
-  const concentration =
-    isFragrance && query.concentration && query.concentration in CONCENTRATION_LABELS ? query.concentration : undefined;
 
-  const apiQuery =
-    `/perfumes?collection=${encodeURIComponent(slug)}&page=${page}&limit=${GALLERY_PAGE_SIZE}&sort=${sort}` +
-    (category ? `&category=${encodeURIComponent(category)}` : '') +
-    (concentration ? `&concentration=${concentration}` : '');
-
-  const [result, all, categories] = await Promise.all([
-    serverFetch<Paginated<PerfumeCard>>(apiQuery, { revalidate: 60 }).catch(
-      () => ({ data: [], meta: { page, limit: GALLERY_PAGE_SIZE, total: 0, totalPages: 0 } }) as Paginated<PerfumeCard>,
-    ),
+  const [all, categories, concentrations] = await Promise.all([
     getCollections(),
-    isFragrance
-      ? serverFetch<Category[]>('/categories', { revalidate: 300 }).catch(() => [] as Category[])
-      : Promise.resolve([] as Category[]),
+    isFragrance ? serverFetch<Category[]>('/categories', { revalidate: 300 }).catch(() => [] as Category[]) : Promise.resolve([] as Category[]),
+    isFragrance ? getConcentrations() : Promise.resolve([] as ConcentrationOption[]),
   ]);
+
+  const category = isFragrance ? query.category?.trim() || undefined : undefined;
+  const concentration = isFragrance && concentrations.some((c) => c.slug === query.concentration) ? query.concentration : undefined;
+
+  const result = await serverFetch<Paginated<PerfumeCard>>(
+    `/perfumes?collection=${encodeURIComponent(slug)}&page=${page}&limit=${GALLERY_PAGE_SIZE}&sort=${sort}` +
+      (category ? `&category=${encodeURIComponent(category)}` : '') +
+      (concentration ? `&concentration=${concentration}` : ''),
+    { revalidate: 60 },
+  ).catch(() => ({ data: [], meta: { page, limit: GALLERY_PAGE_SIZE, total: 0, totalPages: 0 } }) as Paginated<PerfumeCard>);
 
   const siblings = all.filter((c) => c.group === collection.group);
   const { data: products, meta } = result;
   const filtering = !!(category || concentration);
 
-  /** Builds links on this page, keeping sort + filters (page resets unless given) */
   const href = (next: { page?: number; sort?: string }) => {
     const p = new URLSearchParams();
     const s = next.sort ?? sort;
@@ -94,7 +92,6 @@ export default async function CollectionPage({ params, searchParams }: { params:
       />
 
       <div className="container-page pt-6 sm:pt-8">
-        {/* Other collections in this heading */}
         {siblings.length > 1 && (
           <nav aria-label="Related collections" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <ul className="flex gap-2 pb-2 sm:flex-wrap">
@@ -115,12 +112,12 @@ export default async function CollectionPage({ params, searchParams }: { params:
           </nav>
         )}
 
-        {/* Fragrance family + concentration — filters THIS collection only */}
         {isFragrance && (
           <div className="mt-6">
             <FragranceFilters
               basePath={`/collections/${slug}`}
               categories={categories}
+              concentrations={concentrations}
               category={category}
               concentration={concentration}
               keep={{ sort: sort !== 'newest' ? sort : undefined }}
@@ -128,7 +125,6 @@ export default async function CollectionPage({ params, searchParams }: { params:
           </div>
         )}
 
-        {/* Sort + count */}
         <div id="products" className="mt-6 flex scroll-mt-32 flex-col gap-3 border-b border-navy/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-navy/60">
             {meta.total} product{meta.total === 1 ? '' : 's'}
@@ -185,7 +181,6 @@ export default async function CollectionPage({ params, searchParams }: { params:
           </ul>
         )}
 
-        {/* Pagination */}
         {meta.totalPages > 1 && (
           <nav aria-label="Pages" className="mt-12 flex items-center justify-center gap-3">
             {page > 1 ? (

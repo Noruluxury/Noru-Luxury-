@@ -1,13 +1,15 @@
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const ALLOWED_TAGS = new Set(['perfumes', 'brands', 'categories', 'settings', 'collections']);
+const ALLOWED_TAGS = new Set(['perfumes', 'brands', 'categories', 'settings', 'collections', 'concentrations']);
 
-/** Pages that show catalog data — refreshed together with the tags */
+/** These are used on many pages (menu, filters, product pages) — refresh the whole site */
+const SITE_WIDE_TAGS = new Set(['collections', 'concentrations']);
+
 const PATHS_FOR_TAG: Record<string, string[]> = {
   perfumes: ['/', '/perfumes', '/perfumes/[slug]', '/collections', '/collections/[slug]', '/sitemap.xml'],
   brands: ['/', '/brands', '/perfumes'],
-  categories: ['/', '/perfumes', '/collections'],
+  categories: ['/', '/perfumes', '/collections', '/collections/[slug]'],
   settings: ['/', '/contact', '/delivery-returns'],
 };
 
@@ -29,10 +31,9 @@ export async function POST(request: NextRequest) {
   );
 
   for (const tag of tags) {
-    revalidateTag(tag, { expire: 0 }); // cached API data
+    revalidateTag(tag, { expire: 0 });
 
-    if (tag === 'collections') {
-      // The Browse menu is on every page — refresh the whole site
+    if (SITE_WIDE_TAGS.has(tag)) {
       revalidatePath('/', 'layout');
       continue;
     }

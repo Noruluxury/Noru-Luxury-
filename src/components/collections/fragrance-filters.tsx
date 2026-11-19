@@ -1,21 +1,22 @@
 import Link from 'next/link';
 import { X } from 'lucide-react';
-import { CONCENTRATION_LABELS } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 import type { Category } from '@/types';
+import type { ConcentrationOption } from '@/types/concentration';
 
 interface FragranceFiltersProps {
   /** Page the filters stay on, e.g. "/collections" or "/collections/designer-perfumes" */
   basePath: string;
   categories: Category[];
+  concentrations: ConcentrationOption[];
   category?: string;
   concentration?: string;
   /** Other query params to keep (e.g. sort) — page always resets to 1 */
   keep?: Record<string, string | undefined>;
 }
 
-/** Fragrance family + concentration chips that filter on the SAME page (links only, no client JS) */
-export function FragranceFilters({ basePath, categories, category, concentration, keep = {} }: FragranceFiltersProps) {
+/** Fragrance family + concentration chips that filter on the SAME page */
+export function FragranceFilters({ basePath, categories, concentrations, category, concentration, keep = {} }: FragranceFiltersProps) {
   const href = (next: { category?: string | null; concentration?: string | null }) => {
     const params = new URLSearchParams();
     Object.entries(keep).forEach(([key, value]) => value && params.set(key, value));
@@ -36,6 +37,8 @@ export function FragranceFilters({ basePath, categories, category, concentration
       'inline-flex h-10 items-center gap-1.5 px-4 text-sm font-medium transition-colors',
       selected ? 'bg-navy text-gold hover:bg-gold hover:text-navy' : 'border border-navy/15 bg-white hover:border-gold hover:text-gold-dark',
     );
+
+  if (!categories.length && !concentrations.length) return null;
 
   return (
     <div className="space-y-6 border-l-4 border-gold bg-surface p-5 sm:p-6">
@@ -58,22 +61,24 @@ export function FragranceFilters({ basePath, categories, category, concentration
         </div>
       )}
 
-      <div>
-        <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.25em] text-gold-dark">Concentration</p>
-        <ul className="flex flex-wrap gap-2">
-          {Object.entries(CONCENTRATION_LABELS).map(([value, label]) => {
-            const selected = concentration === value;
-            return (
-              <li key={value}>
-                <Link href={href({ concentration: selected ? null : value })} className={chip(selected)} aria-pressed={selected}>
-                  {label}
-                  {selected && <X size={14} />}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      {concentrations.length > 0 && (
+        <div>
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.25em] text-gold-dark">Concentration</p>
+          <ul className="flex flex-wrap gap-2">
+            {concentrations.map((c) => {
+              const selected = concentration === c.slug;
+              return (
+                <li key={c.slug}>
+                  <Link href={href({ concentration: selected ? null : c.slug })} className={chip(selected)} aria-pressed={selected}>
+                    {c.name}
+                    {selected && <X size={14} />}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {hasFilters && (
         <Link

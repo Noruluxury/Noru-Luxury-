@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight, PackageSearch } from 'lucide-react';
 import { serverFetch } from '@/lib/server-api';
 import { getCollections } from '@/lib/collections';
+import { getConcentrations } from '@/lib/concentrations';
+import { concentrationName } from '@/lib/concentration-label';
 import { groupCollections } from '@/lib/product';
-import { CONCENTRATION_LABELS } from '@/lib/labels';
 import { GALLERY_PAGE_SIZE } from '@/lib/constants';
 import { PageHeader } from '@/components/ui/page-header';
 import { SectionHeading, ProductRail } from '@/components/home/product-rail';
@@ -25,29 +26,32 @@ const emptyPage = (page: number): Paginated<PerfumeCard> => ({ data: [], meta: {
 
 export default async function CollectionsPage({ searchParams }: { searchParams: Search }) {
   const query = await searchParams;
-  const category = query.category?.trim() || undefined;
-  const concentration = query.concentration && query.concentration in CONCENTRATION_LABELS ? query.concentration : undefined;
   const page = Math.max(1, Number(query.page) || 1);
-  const filtering = !!(category || concentration);
 
-  const [collections, categories, topRated, results] = await Promise.all([
+  const [collections, categories, concentrations, topRated] = await Promise.all([
     getCollections(),
     serverFetch<Category[]>('/categories', { revalidate: 300 }).catch(() => [] as Category[]),
+    getConcentrations(),
     serverFetch<Paginated<PerfumeCard>>('/perfumes?sort=top_rated&limit=8', { revalidate: 120 })
       .then((r) => r.data.filter((p) => (p.ratingCount ?? 0) > 0))
       .catch(() => [] as PerfumeCard[]),
-    filtering
-      ? serverFetch<Paginated<PerfumeCard>>(
-          `/perfumes?page=${page}&limit=${GALLERY_PAGE_SIZE}` +
-            (category ? `&category=${encodeURIComponent(category)}` : '') +
-            (concentration ? `&concentration=${concentration}` : ''),
-          { revalidate: 60 },
-        ).catch(() => emptyPage(page))
-      : Promise.resolve(emptyPage(page)),
   ]);
 
+  const category = query.category?.trim() || undefined;
+  const concentration = concentrations.some((c) => c.slug === query.concentration) ? query.concentration : undefined;
+  const filtering = !!(category || concentration);
+
+  const results = filtering
+    ? await serverFetch<Paginated<PerfumeCard>>(
+        `/perfumes?page=${page}&limit=${GALLERY_PAGE_SIZE}` +
+          (category ? `&category=${encodeURIComponent(category)}` : '') +
+          (concentration ? `&concentration=${concentration}` : ''),
+        { revalidate: 60 },
+      ).catch(() => emptyPage(page))
+    : emptyPage(page);
+
   const groups = groupCollections(collections);
-  const activeLabel = [categories.find((c) => c.slug === category)?.name, concentration && CONCENTRATION_LABELS[concentration as keyof typeof CONCENTRATION_LABELS]]
+  const activeLabel = [categories.find((c) => c.slug === category)?.name, concentrationName(concentration, concentrations)]
     .filter(Boolean)
     .join(' · ');
 
@@ -61,7 +65,13 @@ export default async function CollectionsPage({ searchParams }: { searchParams: 
 
   const fragranceFilterBlock = (
     <div className="mt-8">
-      <FragranceFilters basePath="/collections" categories={categories} category={category} concentration={concentration} />
+      <FragranceFilters
+        basePath="/collections"
+        categories={categories}
+        concentrations={concentrations}
+        category={category}
+        concentration={concentration}
+      />
 
       {filtering && (
         <div id="products" className="scroll-mt-32 pt-8">

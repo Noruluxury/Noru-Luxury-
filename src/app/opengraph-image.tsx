@@ -28,7 +28,7 @@ export default function OpengraphImage() {
           <span style={{ color: '#ffffff' }}>.</span>
         </div>
         <div style={{ width: 120, height: 4, background: '#c9a227', marginTop: 28 }} />
-        <div style={{ fontSize: 36, marginTop: 28, color: '#ffffff' }}>Shop with confidence. Verify our products by QR code.</div>
+        <div style={{ fontSize: 36, marginTop: 28, color: '#ffffff' }}>Shop with confidence. Verify our products by Barcode.</div>
       </div>
     ),
     size,

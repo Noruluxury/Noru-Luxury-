@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, Camera, Gem, QrCode, ScanLine, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Camera, Gem, QrCode, ScanLine, ShieldCheck, Sparkles, Truck } from 'lucide-react';
 import { serverFetch } from '@/lib/server-api';
 import { getPublicSettings } from '@/lib/settings';
 import { getCollections } from '@/lib/collections';
@@ -35,6 +35,11 @@ const TRUST = [
     icon: Gem,
     title: 'Carefully curated',
     text: 'Designer classics, niche discoveries and lifestyle essentials, thoughtfully selected for quality and distinction.',
+  },
+  {
+    icon: Truck,
+    title: 'Delivered with care',
+    text: 'Securely packed and delivered across all 36 states of Nigeria and the FCT.',
   },
 ];
 
@@ -84,7 +89,7 @@ export default async function HomePage() {
           <div className="text-center lg:text-left">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold sm:text-sm">Beyond Fragrance</p>
             <h1 className="mt-4 text-4xl font-medium leading-[1.1] xs:text-5xl sm:text-6xl xl:text-7xl">
-              ...an extra to your<span className="italic text-gold">confidence</span>
+              ...an extra to your <span className="italic text-gold">confidence</span>
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-sm leading-relaxed text-white/75 sm:text-base lg:mx-0">
               Discover our carefully curated collections of designer and niche perfumes, designer and niche perfume oils,
@@ -128,7 +133,7 @@ export default async function HomePage() {
 
       {/* ===== Trust strip ===== */}
       <section className="border-b border-navy/10 bg-surface">
-        <ul className="container-page grid grid-cols-1 gap-6 py-8 sm:gap-8 md:grid-cols-3 lg:py-10">
+        <ul className="container-page grid grid-cols-1 gap-6 py-8 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4 lg:py-10">
           {TRUST.map(({ icon: Icon, title, text }) => (
             <li key={title} className="flex gap-4">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center bg-navy text-gold">

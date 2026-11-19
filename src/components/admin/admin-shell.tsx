@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import {
   BarChart3,
+  Droplets,
   Landmark,
   Layers,
   LayoutDashboard,
@@ -38,6 +39,7 @@ const NAV = [
   { href: '/admin/scan', label: 'Scan barcode', icon: ScanBarcode },
   { href: '/admin/brands', label: 'Brands', icon: Tags },
   { href: '/admin/categories', label: 'Fragrance families', icon: Layers },
+  { href: '/admin/concentrations', label: 'Concentrations', icon: Droplets },
   { href: '/admin/reviews', label: 'Reviews', icon: MessageSquareQuote },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/bank-accounts', label: 'Bank accounts', icon: Landmark },

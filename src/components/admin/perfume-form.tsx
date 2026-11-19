@@ -7,9 +7,10 @@ import { useFieldArray, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Barcode, Camera, ImagePlus, Plus, Trash2, X } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
-import { CONCENTRATION_LABELS, GENDER_LABELS, LONGEVITY_LABELS, SILLAGE_LABELS } from '@/lib/labels';
+import { GENDER_LABELS, LONGEVITY_LABELS, SILLAGE_LABELS } from '@/lib/labels';
 import { MAX_IMAGE_SIZE_MB } from '@/lib/constants';
 import { isValidGtin } from '@/lib/barcode';
+import { concentrationName } from '@/lib/concentration-label';
 import { COLLECTION_GROUP_LABELS, COLLECTION_GROUP_ORDER, PRODUCT_TYPE_LABELS, isSizedType } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Modal, fieldClass } from './admin-ui';
 import type { Brand, Category, Paginated, Perfume, ProductType } from '@/types';
 import type { ProductCollection } from '@/types/collection';
+import type { ConcentrationOption } from '@/types/concentration';
 
 const CameraScanner = dynamic(() => import('./barcode-scanner').then((m) => m.CameraScanner), {
   ssr: false,
@@ -71,7 +73,7 @@ const toFormValues = (p?: Perfume): FormValues => ({
   description: p?.description ?? '',
   shortDescription: p?.shortDescription ?? '',
   gender: p?.gender ?? 'unisex',
-  concentration: p?.concentration ?? 'eau_de_parfum',
+  concentration: p?.concentration ?? '',
   fragranceFamily: p?.fragranceFamily ?? '',
   longevity: p?.longevity ?? '',
   sillage: p?.sillage ?? '',
@@ -118,7 +120,7 @@ function toPayload(v: FormValues) {
     ...(v.shortDescription.trim() && { shortDescription: v.shortDescription.trim() }),
     ...(sized && {
       gender: v.gender,
-      concentration: v.concentration,
+      ...(v.concentration && { concentration: v.concentration }),
       ...(v.fragranceFamily.trim() && { fragranceFamily: v.fragranceFamily.trim() }),
       ...(v.longevity && { longevity: v.longevity }),
       ...(v.sillage && { sillage: v.sillage }),
@@ -161,6 +163,10 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
     queryKey: ['admin-collection-options'],
     queryFn: async () => (await api.get<ProductCollection[]>('/collections/admin')).data,
   });
+  const concentrationsQuery = useQuery({
+    queryKey: ['admin-concentrations'],
+    queryFn: async () => (await api.get<ConcentrationOption[]>('/concentrations/admin')).data,
+  });
 
   const { register, control, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormValues>({
     defaultValues: toFormValues(initial),
@@ -168,6 +174,7 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
   const { fields, append, remove } = useFieldArray({ control, name: 'variants' });
 
   const productType = watch('productType');
+  const currentConcentration = watch('concentration');
   const sized = isSizedType(productType);
   const visibleFields = sized ? fields : fields.slice(0, 1);
 
@@ -176,9 +183,26 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
     [collectionsQuery.data],
   );
 
+  const concentrationOptions = useMemo(() => {
+    const list = [...(concentrationsQuery.data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+    // Keep the product's current value selectable even if it was hidden or removed from the list
+    if (currentConcentration && !list.some((c) => c.slug === currentConcentration)) {
+      list.push({ _id: currentConcentration, slug: currentConcentration, name: concentrationName(currentConcentration), sortOrder: 999, isActive: false });
+    }
+    return list;
+  }, [concentrationsQuery.data, currentConcentration]);
+
   useEffect(() => {
     if (initial) reset(toFormValues(initial));
   }, [initial, reset]);
+
+  // New products: default to Eau de Parfum once the list loads
+  useEffect(() => {
+    if (mode === 'create' && !currentConcentration && concentrationsQuery.data?.length) {
+      const preferred = concentrationsQuery.data.find((c) => c.slug === 'eau_de_parfum' && c.isActive) ?? concentrationsQuery.data.find((c) => c.isActive);
+      if (preferred) setValue('concentration', preferred.slug);
+    }
+  }, [mode, currentConcentration, concentrationsQuery.data, setValue]);
 
   useEffect(() => () => images.forEach((i) => URL.revokeObjectURL(i.preview)), [images]);
 
@@ -300,7 +324,14 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
         {sized && (
           <>
             <Field label="Gender"><select className={select()} {...register('gender')}>{options(GENDER_LABELS)}</select></Field>
-            <Field label="Concentration"><select className={select()} {...register('concentration')}>{options(CONCENTRATION_LABELS)}</select></Field>
+            <Field label="Concentration" hint="Manage the list in Admin → Concentrations">
+              <select className={select()} {...register('concentration')}>
+                <option value="">—</option>
+                {concentrationOptions.map((c) => (
+                  <option key={c.slug} value={c.slug}>{c.name}{c.isActive === false ? ' (hidden)' : ''}</option>
+                ))}
+              </select>
+            </Field>
             <Field label="Fragrance type" hint="e.g. Aromatic Fougère"><input className={input()} {...register('fragranceFamily')} /></Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Longevity"><select className={select()} {...register('longevity')}><option value="">—</option>{options(LONGEVITY_LABELS)}</select></Field>
@@ -383,7 +414,7 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
                 <Field
                   label="Barcode"
                   error={e?.barcode?.message}
-                  hint="Scan the box barcode — or leave empty to auto-generate"
+                  hint="Scan the box barcode, paste a GS1 number — or leave empty for an in-store barcode"
                   className={cn('col-span-2 sm:col-span-3', sized ? 'lg:col-span-5' : 'lg:col-span-4')}
                 >
                   <div className="flex gap-1">
@@ -401,7 +432,7 @@ export function PerfumeForm({ mode, initial, onSaved }: { mode: 'create' | 'edit
                     <button type="button" onClick={() => setScanIndex(i)} aria-label="Scan box barcode with camera" title="Scan box barcode with camera" className={iconBtn}>
                       <Camera size={18} />
                     </button>
-                    <button type="button" onClick={() => generateBarcode(i)} disabled={generating !== null} aria-label="Generate new barcode" title="No barcode on the box? Generate one" className={iconBtn}>
+                    <button type="button" onClick={() => generateBarcode(i)} disabled={generating !== null} aria-label="Generate in-store barcode" title="Generate in-store barcode" className={iconBtn}>
                       {generating === i ? <Spinner size="sm" /> : <Barcode size={18} />}
                     </button>
                   </div>
